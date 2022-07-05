@@ -35,3 +35,9 @@ FMT.build
 Makefile
 run-msbuild.bat
 fmt.pc
+
+# exclude project files
+**.sln
+**.vcxproj
+**.vcxproj.user
+**.vcxproj.filters
