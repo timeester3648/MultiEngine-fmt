@@ -9,7 +9,7 @@ project "fmt"
 	inlining "Auto"
 
 	files {
-		"./**.h",
+		"./include/**.h",
 
 		"./src/os.cc",
 		"./src/format.cc"
