@@ -174,8 +174,6 @@ FMT_CONSTEXPR inline uint64_t rotr(uint64_t n, uint32_t r) noexcept {
   return (n >> r) | (n << (64 - r));
 }
 
-
-
 // Implementation of Dragonbox algorithm: https://github.com/jk-jeon/dragonbox.
 namespace dragonbox {
 // Computes upper 64 bits of multiplication of a 32-bit unsigned integer and a
@@ -259,7 +257,7 @@ inline uint64_t divide_by_10_to_kappa_plus_1(uint64_t n) noexcept {
 }
 
 // Various subroutines using pow10 cache
-template <class T> struct cache_accessor;
+template <typename T> struct cache_accessor;
 
 template <> struct cache_accessor<float> {
   using carrier_uint = float_info<float>::carrier_uint;
@@ -1021,8 +1019,7 @@ template <> struct cache_accessor<double> {
       {0xe4d5e82392a40515, 0x0fabaf3feaa5334b},
       {0xb8da1662e7b00a17, 0x3d6a751f3b936244},
       {0x95527a5202df0ccb, 0x0f37801e0c43ebc9},
-      { 0xf13e34aabb430a15,
-        0x647726b9e7c68ff0 }
+      {0xf13e34aabb430a15, 0x647726b9e7c68ff0}
 #endif
     };
 
@@ -1130,7 +1127,7 @@ FMT_FUNC uint128_fallback get_cached_power(int k) noexcept {
 }
 
 // Various integer checks
-template <class T>
+template <typename T>
 bool is_left_endpoint_integer_shorter_interval(int exponent) noexcept {
   const int case_shorter_interval_left_endpoint_lower_threshold = 2;
   const int case_shorter_interval_left_endpoint_upper_threshold = 3;
@@ -1144,7 +1141,9 @@ FMT_INLINE int remove_trailing_zeros(uint32_t& n) noexcept {
   // Modular inverse of 5 (mod 2^32): (mod_inv_5 * 5) mod 2^32 = 1.
   // See https://github.com/fmtlib/fmt/issues/3163 for more details.
   const uint32_t mod_inv_5 = 0xcccccccd;
-  const uint32_t mod_inv_25 = mod_inv_5 * mod_inv_5;
+  // Casts are needed to workaround a bug in MSVC 19.22 and older.
+  const uint32_t mod_inv_25 =
+      static_cast<uint32_t>(uint64_t(mod_inv_5) * mod_inv_5);
 
   int s = 0;
   while (true) {
@@ -1215,7 +1214,7 @@ FMT_INLINE int remove_trailing_zeros(uint64_t& n) noexcept {
 }
 
 // The main algorithm for shorter interval case
-template <class T>
+template <typename T>
 FMT_INLINE decimal_fp<T> shorter_interval_case(int exponent) noexcept {
   decimal_fp<T> ret_value;
   // Compute k and beta
