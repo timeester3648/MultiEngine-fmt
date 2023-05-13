@@ -49,6 +49,7 @@ Features
 * Fast IEEE 754 floating-point formatter with correct rounding, shortness and
   round-trip guarantees using the `Dragonbox <https://github.com/jk-jeon/dragonbox>`_
   algorithm
+* Portable Unicode support
 * Safe `printf implementation
   <https://fmt.dev/latest/api.html#printf-formatting>`_ including the POSIX
   extension for positional arguments
@@ -533,8 +534,7 @@ Maintainers
 -----------
 
 The {fmt} library is maintained by Victor Zverovich (`vitaut
-<https://github.com/vitaut>`_) and Jonathan Müller (`foonathan
-<https://github.com/foonathan>`_) with contributions from many other people.
+<https://github.com/vitaut>`_) with contributions from many other people.
 See `Contributors <https://github.com/fmtlib/fmt/graphs/contributors>`_ and
 `Releases <https://github.com/fmtlib/fmt/releases>`_ for some of the names.
 Let us know if your contribution is not listed or mentioned incorrectly and

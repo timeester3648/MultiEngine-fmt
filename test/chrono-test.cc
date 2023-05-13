@@ -820,9 +820,10 @@ TEST(chrono_test, cpp20_duration_subsecond_support) {
                         std::chrono::duration<long long, std::ratio<1, 7>>(1)),
             "00.142857");
 
-  EXPECT_EQ(fmt::format("{:%S}",
-                        std::chrono::duration<char, std::ratio<1, 100>>(0x80)),
-            "-01.28");
+  EXPECT_EQ(
+      fmt::format("{:%S}",
+                  std::chrono::duration<signed char, std::ratio<1, 100>>(0x80)),
+      "-01.28");
 
   EXPECT_EQ(
       fmt::format("{:%M:%S}",
@@ -848,6 +849,30 @@ TEST(chrono_test, utc_clock) {
             fmt::format("{:%Y-%m-%d %H:%M:%S}", t1_utc));
 }
 #endif
+
+TEST(chrono_test, timestamps_ratios) {
+  std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds>
+      t1(std::chrono::milliseconds(67890));
+
+  EXPECT_EQ(fmt::format("{:%M:%S}", t1), "01:07.890");
+
+  std::chrono::time_point<std::chrono::system_clock, std::chrono::minutes>
+      t2(std::chrono::minutes(7));
+
+  EXPECT_EQ(fmt::format("{:%M:%S}", t2), "07:00");
+
+  std::chrono::time_point<std::chrono::system_clock, 
+                          std::chrono::duration<int, std::ratio<9>>>
+      t3(std::chrono::duration<int, std::ratio<9>>(7));
+
+  EXPECT_EQ(fmt::format("{:%M:%S}", t3), "01:03");
+
+  std::chrono::time_point<std::chrono::system_clock, 
+                          std::chrono::duration<int, std::ratio<63>>>
+      t4(std::chrono::duration<int, std::ratio<63>>(1));
+
+  EXPECT_EQ(fmt::format("{:%M:%S}", t4), "01:03");
+}
 
 TEST(chrono_test, timestamps_sub_seconds) {
   std::chrono::time_point<std::chrono::system_clock,
@@ -904,6 +929,8 @@ TEST(chrono_test, timestamps_sub_seconds) {
 
   EXPECT_EQ(fmt::format("{}.{}", strftime_full_utc(t9_sec), t9_sub_sec_part),
             fmt::format("{:%Y-%m-%d %H:%M:%S}", t9));
+  EXPECT_EQ(fmt::format("{}.{}", strftime_full_utc(t9_sec), t9_sub_sec_part),
+            fmt::format("{:%Y-%m-%d %T}", t9));
 
   const std::chrono::time_point<std::chrono::system_clock,
                                 std::chrono::milliseconds>

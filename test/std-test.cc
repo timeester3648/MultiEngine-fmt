@@ -7,6 +7,7 @@
 
 #include "fmt/std.h"
 
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -16,8 +17,8 @@
 
 using testing::StartsWith;
 
-TEST(std_test, path) {
 #ifdef __cpp_lib_filesystem
+TEST(std_test, path) {
   EXPECT_EQ(fmt::format("{:8}", std::filesystem::path("foo")), "\"foo\"   ");
   EXPECT_EQ(fmt::format("{}", std::filesystem::path("foo\"bar.txt")),
             "\"foo\\\"bar.txt\"");
@@ -25,32 +26,24 @@ TEST(std_test, path) {
             "\"foo\\\"bar.txt\"");
 
 #  ifdef _WIN32
-  // File.txt in Russian.
-  const wchar_t unicode_path[] = {0x424, 0x430, 0x439, 0x43b, 0x2e,
-                                  0x74,  0x78,  0x74,  0};
-  const char unicode_u8path[] = {'"',        char(0xd0), char(0xa4), char(0xd0),
-                                 char(0xb0), char(0xd0), char(0xb9), char(0xd0),
-                                 char(0xbb), '.',        't',        'x',
-                                 't',        '"',        '\0'};
-  EXPECT_EQ(fmt::format("{}", std::filesystem::path(unicode_path)),
-            unicode_u8path);
+  EXPECT_EQ(fmt::format("{}", std::filesystem::path(
+                                  L"\x0428\x0447\x0443\x0447\x044B\x043D\x0448"
+                                  L"\x0447\x044B\x043D\x0430")),
+            "\"Шчучыншчына\"");
+  EXPECT_EQ(fmt::format("{}", std::filesystem::path(L"\xd800")), "\"\\ud800\"");
 #  endif
-#endif
 }
 
-TEST(ranges_std_test, format_vector_path) {
 // Test ambiguity problem described in #2954.
-#ifdef __cpp_lib_filesystem
+TEST(ranges_std_test, format_vector_path) {
   auto p = std::filesystem::path("foo/bar.txt");
   auto c = std::vector<std::string>{"abc", "def"};
   EXPECT_EQ(fmt::format("path={}, range={}", p, c),
             "path=\"foo/bar.txt\", range=[\"abc\", \"def\"]");
-#endif
 }
 
+// Test that path is not escaped twice in the debug mode.
 TEST(ranges_std_test, format_quote_path) {
-  // Test that path is not escaped twice in the debug mode.
-#ifdef __cpp_lib_filesystem
   auto vec =
       std::vector<std::filesystem::path>{"path1/file1.txt", "path2/file2.txt"};
   EXPECT_EQ(fmt::format("{}", vec),
@@ -60,8 +53,8 @@ TEST(ranges_std_test, format_quote_path) {
   EXPECT_EQ(fmt::format("{}", o), "optional(\"path/file.txt\")");
   EXPECT_EQ(fmt::format("{:?}", o), "optional(\"path/file.txt\")");
 #  endif
-#endif
 }
+#endif
 
 TEST(std_test, thread_id) {
   EXPECT_FALSE(fmt::format("{}", std::this_thread::get_id()).empty());
@@ -95,6 +88,26 @@ TEST(std_test, optional) {
 #endif
 }
 
+struct throws_on_move {
+  throws_on_move() = default;
+
+  [[noreturn]] throws_on_move(throws_on_move&&) {
+    throw std::runtime_error("Thrown by throws_on_move");
+  }
+
+  throws_on_move(const throws_on_move&) = default;
+};
+
+namespace fmt {
+template <> struct formatter<throws_on_move> : formatter<string_view> {
+  auto format(const throws_on_move&, format_context& ctx) const
+      -> decltype(ctx.out()) {
+    string_view str("<throws_on_move>");
+    return formatter<string_view>::format(str, ctx);
+  }
+};
+}  // namespace fmt
+
 TEST(std_test, variant) {
 #ifdef __cpp_lib_variant
   EXPECT_EQ(fmt::format("{}", std::monostate{}), "monostate");
@@ -126,6 +139,18 @@ TEST(std_test, variant) {
 
   volatile int i = 42;  // Test compile error before GCC 11 described in #3068.
   EXPECT_EQ(fmt::format("{}", i), "42");
+
+  std::variant<std::monostate, throws_on_move> v6;
+
+  try {
+    throws_on_move thrower;
+    v6.emplace<throws_on_move>(std::move(thrower));
+  } catch (const std::runtime_error&) {
+  }
+  // v6 is now valueless by exception
+
+  EXPECT_EQ(fmt::format("{}", v6), "variant(valueless by exception)");
+
 #endif
 }
 
@@ -184,6 +209,8 @@ TEST(std_test, exception) {
   }
 
 #ifdef __cpp_lib_filesystem
+  // Tests that the inline namespace is stripped out, e.g.
+  // std::filesystem::__cxx11::* -> std::filesystem::*.
   try {
     throw std::filesystem::filesystem_error("message", std::error_code());
   } catch (const std::filesystem::filesystem_error& ex) {

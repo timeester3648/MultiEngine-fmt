@@ -30,25 +30,7 @@ using testing::Contains;
 #  define FMT_HAS_C99_STRFTIME 1
 #endif
 
-namespace test_ns {
-template <typename Char> class test_string {
- private:
-  std::basic_string<Char> s_;
-
- public:
-  test_string(const Char* s) : s_(s) {}
-  const Char* data() const { return s_.data(); }
-  size_t length() const { return s_.size(); }
-  operator const Char*() const { return s_.c_str(); }
-};
-
-template <typename Char>
-fmt::basic_string_view<Char> to_string_view(const test_string<Char>& s) {
-  return {s.data(), s.length()};
-}
-
 struct non_string {};
-}  // namespace test_ns
 
 template <typename T> class is_string_test : public testing::Test {};
 
@@ -70,8 +52,7 @@ TYPED_TEST(is_string_test, is_string) {
   using fmt_string_view = fmt::detail::std_string_view<TypeParam>;
   EXPECT_TRUE(std::is_empty<fmt_string_view>::value !=
               fmt::detail::is_string<fmt_string_view>::value);
-  EXPECT_TRUE(fmt::detail::is_string<test_ns::test_string<TypeParam>>::value);
-  EXPECT_FALSE(fmt::detail::is_string<test_ns::non_string>::value);
+  EXPECT_FALSE(fmt::detail::is_string<non_string>::value);
 }
 
 // std::is_constructible is broken in MSVC until version 2015.
@@ -165,14 +146,9 @@ TEST(xchar_test, format_to) {
 }
 
 TEST(xchar_test, vformat_to) {
-  using wcontext = fmt::wformat_context;
-  fmt::basic_format_arg<wcontext> warg = fmt::detail::make_arg<wcontext>(42);
-  auto wargs = fmt::basic_format_args<wcontext>(&warg, 1);
+  auto args = fmt::make_wformat_args(42);
   auto w = std::wstring();
-  fmt::vformat_to(std::back_inserter(w), L"{}", wargs);
-  EXPECT_EQ(L"42", w);
-  w.clear();
-  fmt::vformat_to(std::back_inserter(w), FMT_STRING(L"{}"), wargs);
+  fmt::vformat_to(std::back_inserter(w), L"{}", args);
   EXPECT_EQ(L"42", w);
 }
 
@@ -461,8 +437,8 @@ TEST(locale_test, format) {
   EXPECT_EQ("1~234~567", fmt::format(loc, "{:L}", 1234567));
   EXPECT_EQ("-1~234~567", fmt::format(loc, "{:L}", -1234567));
   EXPECT_EQ("-256", fmt::format(loc, "{:L}", -256));
-  fmt::format_arg_store<fmt::format_context, int> as{1234567};
-  EXPECT_EQ("1~234~567", fmt::vformat(loc, "{:L}", fmt::format_args(as)));
+  auto n = 1234567;
+  EXPECT_EQ("1~234~567", fmt::vformat(loc, "{:L}", fmt::make_format_args(n)));
   auto s = std::string();
   fmt::format_to(std::back_inserter(s), loc, "{:L}", 1234567);
   EXPECT_EQ("1~234~567", s);
@@ -495,10 +471,9 @@ TEST(locale_test, wformat) {
   auto loc = std::locale(std::locale(), new numpunct<wchar_t>());
   EXPECT_EQ(L"1234567", fmt::format(std::locale(), L"{:L}", 1234567));
   EXPECT_EQ(L"1~234~567", fmt::format(loc, L"{:L}", 1234567));
-  using wcontext = fmt::buffer_context<wchar_t>;
-  fmt::format_arg_store<wcontext, int> as{1234567};
+  int n = 1234567;
   EXPECT_EQ(L"1~234~567",
-            fmt::vformat(loc, L"{:L}", fmt::basic_format_args<wcontext>(as)));
+            fmt::vformat(loc, L"{:L}", fmt::make_wformat_args(n)));
   EXPECT_EQ(L"1234567", fmt::format(std::locale("C"), L"{:L}", 1234567));
 
   auto no_grouping_loc = std::locale(std::locale(), new no_grouping<wchar_t>());
