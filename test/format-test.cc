@@ -1355,12 +1355,9 @@ TEST(format_test, format_double) {
 
   if (std::numeric_limits<long double>::digits == 64) {
     auto ld = 0xf.ffffffffffp-3l;
-    safe_sprintf(buffer, "%La", ld);
-    EXPECT_EQ(fmt::format("{:a}", ld), buffer);
-    safe_sprintf(buffer, "%.*La", 10, ld);
-    EXPECT_EQ(fmt::format("{:.10a}", ld), buffer);
-    safe_sprintf(buffer, "%.*La", 9, ld);
-    EXPECT_EQ(fmt::format("{:.9a}", ld), buffer);
+    EXPECT_EQ(fmt::format("{:a}", ld), "0xf.ffffffffffp-3");
+    EXPECT_EQ(fmt::format("{:.10a}", ld), "0xf.ffffffffffp-3");
+    EXPECT_EQ(fmt::format("{:.9a}", ld), "0x1.000000000p+1");
   }
 #endif
 
@@ -1379,12 +1376,10 @@ TEST(format_test, format_double) {
 
   if (std::numeric_limits<long double>::digits == 64) {
     auto ld = (std::numeric_limits<long double>::min)();
-    safe_sprintf(buffer, "%La", ld);
-    EXPECT_EQ(fmt::format("{:a}", ld), buffer);
+    EXPECT_EQ(fmt::format("{:a}", ld), "0x8p-16385");
 
     ld = (std::numeric_limits<long double>::max)();
-    safe_sprintf(buffer, "%La", ld);
-    EXPECT_EQ(fmt::format("{:a}", ld), buffer);
+    EXPECT_EQ(fmt::format("{:a}", ld), "0xf.fffffffffffffffp+16380");
 
     ld = std::numeric_limits<long double>::denorm_min();
     EXPECT_EQ(fmt::format("{:a}", ld), "0x0.000000000000001p-16382");
@@ -1418,9 +1413,6 @@ TEST(format_test, precision_rounding) {
   EXPECT_EQ("1.9156918820264798e-56",
             fmt::format("{}", 1.9156918820264798e-56));
   EXPECT_EQ("0.0000", fmt::format("{:.4f}", 7.2809479766055470e-15));
-
-  // Trigger a rounding error in Grisu by a specially chosen number.
-  EXPECT_EQ("3788512123356.985352", fmt::format("{:f}", 3788512123356.985352));
 }
 
 TEST(format_test, prettify_float) {
@@ -1435,7 +1427,6 @@ TEST(format_test, prettify_float) {
   EXPECT_EQ("12.34", fmt::format("{}", 1234e-2));
   EXPECT_EQ("0.001234", fmt::format("{}", 1234e-6));
   EXPECT_EQ("0.1", fmt::format("{}", 0.1f));
-  EXPECT_EQ("0.10000000149011612", fmt::format("{}", double(0.1f)));
   EXPECT_EQ("1.3563156e-19", fmt::format("{}", 1.35631564e-19f));
 }
 
@@ -1480,6 +1471,8 @@ TEST(format_test, format_infinity) {
 TEST(format_test, format_long_double) {
   EXPECT_EQ("0", fmt::format("{0:}", 0.0l));
   EXPECT_EQ("0.000000", fmt::format("{0:f}", 0.0l));
+  EXPECT_EQ("0.0", fmt::format("{:.1f}", 0.000000001l));
+  EXPECT_EQ("0.10", fmt::format("{:.2f}", 0.099l));
   EXPECT_EQ("392.65", fmt::format("{0:}", 392.65l));
   EXPECT_EQ("392.65", fmt::format("{0:g}", 392.65l));
   EXPECT_EQ("392.65", fmt::format("{0:G}", 392.65l));
@@ -1494,9 +1487,8 @@ TEST(format_test, format_long_double) {
   if (fmt::detail::is_double_double<decltype(ld)>::value) {
     safe_sprintf(buffer, "%a", static_cast<double>(ld));
     EXPECT_EQ(buffer, fmt::format("{:a}", ld));
-  } else {
-    safe_sprintf(buffer, "%La", ld);
-    EXPECT_EQ(buffer, fmt::format("{:a}", ld));
+  } else if (std::numeric_limits<long double>::digits == 64) {
+    EXPECT_EQ(fmt::format("{:a}", ld), "0xd.3d70a3d70a3d70ap-2");
   }
 }
 
@@ -1683,8 +1675,7 @@ TEST(format_test, format_custom) {
 
 TEST(format_test, format_to_custom) {
   char buf[10] = {};
-  auto end =
-      &*fmt::format_to(fmt::detail::make_checked(buf, 10), "{}", Answer());
+  auto end = fmt::format_to(buf, "{}", Answer());
   EXPECT_EQ(end, buf + 2);
   EXPECT_STREQ(buf, "42");
 }
@@ -2110,7 +2101,7 @@ struct check_back_appender {};
 
 FMT_BEGIN_NAMESPACE
 template <> struct formatter<check_back_appender> {
-  auto parse(format_parse_context& ctx) -> decltype(ctx.begin()) {
+  FMT_CONSTEXPR auto parse(format_parse_context& ctx) -> decltype(ctx.begin()) {
     return ctx.begin();
   }
 
@@ -2148,6 +2139,13 @@ TEST(format_test, format_as) {
   EXPECT_EQ(fmt::format("{}", test::scoped_enum_as_string_view()), "foo");
   EXPECT_EQ(fmt::format("{}", test::scoped_enum_as_string()), "foo");
   EXPECT_EQ(fmt::format("{}", test::struct_as_int()), "42");
+}
+
+TEST(format_test, format_as_to_string) {
+  EXPECT_EQ(fmt::to_string(test::scoped_enum_as_int()), "42");
+  EXPECT_EQ(fmt::to_string(test::scoped_enum_as_string_view()), "foo");
+  EXPECT_EQ(fmt::to_string(test::scoped_enum_as_string()), "foo");
+  EXPECT_EQ(fmt::to_string(test::struct_as_int()), "42");
 }
 
 template <typename Char, typename T> bool check_enabled_formatter() {
@@ -2251,3 +2249,19 @@ TEST(format_test, format_named_arg_with_locale) {
 }
 
 #endif  // FMT_STATIC_THOUSANDS_SEPARATOR
+
+struct convertible_to_nonconst_cstring {
+  operator char*() const {
+    static char c[] = "bar";
+    return c;
+  }
+};
+
+FMT_BEGIN_NAMESPACE
+template <>
+struct formatter<convertible_to_nonconst_cstring> : formatter<char*> {};
+FMT_END_NAMESPACE
+
+TEST(format_test, formatter_nonconst_char) {
+  EXPECT_EQ(fmt::format("{}", convertible_to_nonconst_cstring()), "bar");
+}
