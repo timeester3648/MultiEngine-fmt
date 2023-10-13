@@ -92,7 +92,7 @@ Examples
 .. code:: c++
 
     #include <fmt/core.h>
-    
+
     int main() {
       fmt::print("Hello, world!\n");
     }
@@ -294,7 +294,7 @@ Then you can run the speed test::
 or the bloat test::
 
     $ make bloat-test
-    
+
 Migrating code
 --------------
 
@@ -315,13 +315,13 @@ Projects using this library
   an open-source library for mathematical programming
 
 * `Aseprite <https://github.com/aseprite/aseprite>`_:
-  animated sprite editor & pixel art tool 
+  animated sprite editor & pixel art tool
 
 * `AvioBook <https://www.aviobook.aero/en>`_: a comprehensive aircraft
   operations suite
-  
+
 * `Blizzard Battle.net <https://battle.net/>`_: an online gaming platform
-  
+
 * `Celestia <https://celestia.space/>`_: real-time 3D visualization of space
 
 * `Ceph <https://ceph.com/>`_: a scalable distributed storage system
@@ -330,7 +330,7 @@ Projects using this library
 
 * `ClickHouse <https://github.com/ClickHouse/ClickHouse>`_: an analytical database
   management system
-  
+
 * `Contour <https://github.com/contour-terminal/contour/>`_: a modern terminal emulator
 
 * `CUAUV <https://cuauv.org/>`_: Cornell University's autonomous underwater
@@ -391,7 +391,7 @@ Projects using this library
 
 * `quasardb <https://www.quasardb.net/>`_: a distributed, high-performance,
   associative database
-  
+
 * `Quill <https://github.com/odygrd/quill>`_: asynchronous low-latency logging library
 
 * `QKW <https://github.com/ravijanjam/qkw>`_: generalizing aliasing to simplify
@@ -521,7 +521,7 @@ License
 -------
 
 {fmt} is distributed under the MIT `license
-<https://github.com/fmtlib/fmt/blob/master/LICENSE.rst>`_.
+<https://github.com/fmtlib/fmt/blob/master/LICENSE>`_.
 
 Documentation License
 ---------------------
@@ -543,3 +543,10 @@ See `Contributors <https://github.com/fmtlib/fmt/graphs/contributors>`_ and
 `Releases <https://github.com/fmtlib/fmt/releases>`_ for some of the names.
 Let us know if your contribution is not listed or mentioned incorrectly and
 we'll make it right.
+
+Security Policy
+---------------
+
+To report a security issue, please disclose it at `security advisory <https://github.com/fmtlib/fmt/security/advisories/new>`_.
+
+This project is maintained by a team of volunteers on a reasonable-effort basis. As such, please give us at least 90 days to work on a fix before public exposure.
