@@ -173,6 +173,10 @@ TEST(util_test, parse_nonnegative_int) {
   EXPECT_EQ(fmt::detail::parse_nonnegative_int(begin, end, -1), -1);
 }
 
+TEST(format_impl_test, compute_width) {
+  EXPECT_EQ(fmt::detail::compute_width("вожык"), 5);
+}
+
 TEST(util_test, utf8_to_utf16) {
   auto u = fmt::detail::utf8_to_utf16("лошадка");
   EXPECT_EQ(L"\x043B\x043E\x0448\x0430\x0434\x043A\x0430", u.str());
@@ -1050,6 +1054,13 @@ TEST(format_test, precision) {
 
   EXPECT_EQ("st", fmt::format("{0:.2}", "str"));
   EXPECT_EQ("вожык", fmt::format("{0:.5}", "вожыкі"));
+  EXPECT_EQ("123456", fmt::format("{0:.6}", "123456\xad"));
+}
+
+TEST(xchar_test, utf8_precision) {
+  auto result = fmt::format("{:.4}", "caf\u00e9s");  // cafés
+  EXPECT_EQ(fmt::detail::compute_width(result), 4);
+  EXPECT_EQ(result, "caf\u00e9");
 }
 
 TEST(format_test, runtime_precision) {
@@ -1148,6 +1159,8 @@ TEST(format_test, format_bool) {
   EXPECT_EQ("true", fmt::format("{:s}", true));
   EXPECT_EQ("false", fmt::format("{:s}", false));
   EXPECT_EQ("false ", fmt::format("{:6s}", false));
+  EXPECT_THROW_MSG((void)fmt::format(runtime("{:c}"), false), format_error,
+                   "invalid format specifier");
 }
 
 TEST(format_test, format_short) {
@@ -1531,8 +1544,12 @@ TEST(format_test, format_cstring) {
   EXPECT_EQ("test", fmt::format("{0:s}", "test"));
   char nonconst[] = "nonconst";
   EXPECT_EQ("nonconst", fmt::format("{0}", nonconst));
+  auto nullstr = static_cast<const char*>(nullptr);
   EXPECT_THROW_MSG(
-      (void)fmt::format(runtime("{0}"), static_cast<const char*>(nullptr)),
+      (void)fmt::format("{}", nullstr),
+      format_error, "string pointer is null");
+  EXPECT_THROW_MSG(
+      (void)fmt::format("{:s}", nullstr),
       format_error, "string pointer is null");
 }
 
@@ -1788,7 +1805,7 @@ FMT_BEGIN_NAMESPACE
 template <> struct formatter<point> : nested_formatter<double> {
   auto format(point p, format_context& ctx) const -> decltype(ctx.out()) {
     return write_padded(ctx, [this, p](auto out) -> decltype(out) {
-      return format_to(out, "({}, {})", nested(p.x), nested(p.y));
+      return fmt::format_to(out, "({}, {})", nested(p.x), nested(p.y));
     });
   }
 };
@@ -2156,6 +2173,13 @@ auto format_as(scoped_enum_as_string) -> std::string { return "foo"; }
 
 struct struct_as_int {};
 auto format_as(struct_as_int) -> int { return 42; }
+
+struct struct_as_const_reference {
+  const std::string name = "foo";
+};
+auto format_as(const struct_as_const_reference& s) -> const std::string& {
+  return s.name;
+}
 }  // namespace test
 
 TEST(format_test, format_as) {
@@ -2163,6 +2187,7 @@ TEST(format_test, format_as) {
   EXPECT_EQ(fmt::format("{}", test::scoped_enum_as_string_view()), "foo");
   EXPECT_EQ(fmt::format("{}", test::scoped_enum_as_string()), "foo");
   EXPECT_EQ(fmt::format("{}", test::struct_as_int()), "42");
+  EXPECT_EQ(fmt::format("{}", test::struct_as_const_reference()), "foo");
 }
 
 TEST(format_test, format_as_to_string) {

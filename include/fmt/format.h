@@ -791,12 +791,17 @@ inline auto code_point_index(basic_string_view<Char> s, size_t n) -> size_t {
 
 // Calculates the index of the nth code point in a UTF-8 string.
 inline auto code_point_index(string_view s, size_t n) -> size_t {
-  const char* data = s.data();
-  size_t num_code_points = 0;
-  for (size_t i = 0, size = s.size(); i != size; ++i) {
-    if ((data[i] & 0xc0) != 0x80 && ++num_code_points > n) return i;
-  }
-  return s.size();
+  size_t result = s.size();
+  const char* begin = s.begin();
+  for_each_codepoint(s, [begin, &n, &result](uint32_t, string_view sv) {
+    if (n != 0) {
+      --n;
+      return true;
+    }
+    result = to_unsigned(sv.begin() - begin);
+    return false;
+  });
+  return result;
 }
 
 inline auto code_point_index(basic_string_view<char8_type> s, size_t n)
@@ -1022,7 +1027,6 @@ class basic_memory_buffer final : public detail::buffer<T> {
   /** Increases the buffer capacity to *new_capacity*. */
   void reserve(size_t new_capacity) { this->try_reserve(new_capacity); }
 
-  // Directly append data into the buffer
   using detail::buffer<T>::append;
   template <typename ContiguousRange>
   void append(const ContiguousRange& range) {
@@ -1038,7 +1042,7 @@ struct is_contiguous<basic_memory_buffer<T, SIZE, Allocator>> : std::true_type {
 
 FMT_END_EXPORT
 namespace detail {
-FMT_API bool write_console(std::FILE* f, string_view text);
+FMT_API bool write_console(int fd, string_view text);
 FMT_API void print(std::FILE*, string_view);
 }  // namespace detail
 
@@ -1157,10 +1161,10 @@ using uint32_or_64_or_128_t =
 template <typename T>
 using uint64_or_128_t = conditional_t<num_bits<T>() <= 64, uint64_t, uint128_t>;
 
-#define FMT_POWERS_OF_10(factor)                                             \
-  factor * 10, (factor)*100, (factor)*1000, (factor)*10000, (factor)*100000, \
-      (factor)*1000000, (factor)*10000000, (factor)*100000000,               \
-      (factor)*1000000000
+#define FMT_POWERS_OF_10(factor)                                  \
+  factor * 10, (factor) * 100, (factor) * 1000, (factor) * 10000, \
+      (factor) * 100000, (factor) * 1000000, (factor) * 10000000, \
+      (factor) * 100000000, (factor) * 1000000000
 
 // Converts value in the range [0, 100) to a string.
 constexpr const char* digits2(size_t value) {
@@ -1958,11 +1962,13 @@ auto write_escaped_string(OutputIt out, basic_string_view<Char> str)
 
 template <typename Char, typename OutputIt>
 auto write_escaped_char(OutputIt out, Char v) -> OutputIt {
+  Char v_array[1] = {v};
   *out++ = static_cast<Char>('\'');
   if ((needs_escape(static_cast<uint32_t>(v)) && v != static_cast<Char>('"')) ||
       v == static_cast<Char>('\'')) {
-    out = write_escaped_cp(
-        out, find_escape_result<Char>{&v, &v + 1, static_cast<uint32_t>(v)});
+    out = write_escaped_cp(out,
+                           find_escape_result<Char>{v_array, v_array + 1,
+                                                    static_cast<uint32_t>(v)});
   } else {
     *out++ = v;
   }
@@ -2341,9 +2347,10 @@ template <typename Char, typename OutputIt>
 FMT_CONSTEXPR auto write(OutputIt out, const Char* s,
                          const format_specs<Char>& specs, locale_ref)
     -> OutputIt {
-  return specs.type != presentation_type::pointer
-             ? write(out, basic_string_view<Char>(s), specs, {})
-             : write_ptr<Char>(out, bit_cast<uintptr_t>(s), &specs);
+  if (specs.type == presentation_type::pointer)
+    return write_ptr<Char>(out, bit_cast<uintptr_t>(s), &specs);
+  if (!s) throw_format_error("string pointer is null");
+  return write(out, basic_string_view<Char>(s), specs, {});
 }
 
 template <typename Char, typename OutputIt, typename T,
@@ -3751,8 +3758,11 @@ template <typename Char, typename OutputIt, typename T,
 FMT_CONSTEXPR auto write(OutputIt out, const T& value)
     -> enable_if_t<mapped_type_constant<T, Context>::value == type::custom_type,
                    OutputIt> {
+  auto formatter = typename Context::template formatter_type<T>();
+  auto parse_ctx = typename Context::parse_context_type({});
+  formatter.parse(parse_ctx);
   auto ctx = Context(out, {}, {});
-  return typename Context::template formatter_type<T>().format(value, ctx);
+  return formatter.format(value, ctx);
 }
 
 // An argument visitor that formats the argument and writes it via the output
@@ -4049,6 +4059,7 @@ struct formatter<T, Char, enable_if_t<detail::has_format_as<T>::value>>
     : private formatter<detail::format_as_t<T>, Char> {
   using base = formatter<detail::format_as_t<T>, Char>;
   using base::parse;
+  using base::set_debug_format;
 
   template <typename FormatContext>
   auto format(const T& value, FormatContext& ctx) const -> decltype(ctx.out()) {

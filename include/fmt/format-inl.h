@@ -73,9 +73,8 @@ FMT_FUNC void report_error(format_func func, int error_code,
 }
 
 // A wrapper around fwrite that throws on error.
-inline void fwrite_fully(const void* ptr, size_t size, size_t count,
-                         FILE* stream) {
-  size_t written = std::fwrite(ptr, size, count, stream);
+inline void fwrite_fully(const void* ptr, size_t count, FILE* stream) {
+  size_t written = std::fwrite(ptr, 1, count, stream);
   if (written < count)
     FMT_THROW(system_error(errno, FMT_STRING("cannot write to file")));
 }
@@ -985,8 +984,7 @@ template <> struct cache_accessor<double> {
       {0xe0accfa875af45a7, 0x93eb1b80a33b8606},
       {0x8c6c01c9498d8b88, 0xbc72f130660533c4},
       {0xaf87023b9bf0ee6a, 0xeb8fad7c7f8680b5},
-      { 0xdb68c2ca82ed2a05,
-        0xa67398db9f6820e2 }
+      {0xdb68c2ca82ed2a05, 0xa67398db9f6820e2}
 #else
       {0xff77b1fcbebcdc4f, 0x25e8e89c13bb0f7b},
       {0xce5d73ff402d98e3, 0xfb0a3d212dc81290},
@@ -1132,7 +1130,7 @@ FMT_INLINE int remove_trailing_zeros(uint32_t& n, int s = 0) noexcept {
   FMT_ASSERT(n != 0, "");
   // Modular inverse of 5 (mod 2^32): (mod_inv_5 * 5) mod 2^32 = 1.
   constexpr uint32_t mod_inv_5 = 0xcccccccd;
-  constexpr uint32_t mod_inv_25 = 0xc28f5c29; // = mod_inv_5 * mod_inv_5
+  constexpr uint32_t mod_inv_25 = 0xc28f5c29;  // = mod_inv_5 * mod_inv_5
 
   while (true) {
     auto q = rotr(n * mod_inv_25, 2);
@@ -1168,7 +1166,7 @@ FMT_INLINE int remove_trailing_zeros(uint64_t& n) noexcept {
 
   // If n is not divisible by 10^8, work with n itself.
   constexpr uint64_t mod_inv_5 = 0xcccccccccccccccd;
-  constexpr uint64_t mod_inv_25 = 0x8f5c28f5c28f5c29; // = mod_inv_5 * mod_inv_5
+  constexpr uint64_t mod_inv_25 = 0x8f5c28f5c28f5c29;  // mod_inv_5 * mod_inv_5
 
   int s = 0;
   while (true) {
@@ -1427,19 +1425,16 @@ FMT_FUNC std::string vformat(string_view fmt, format_args args) {
 
 namespace detail {
 #if !defined(_WIN32) || defined(FMT_WINDOWS_NO_WCHAR)
-FMT_FUNC bool write_console(std::FILE*, string_view) { return false; }
+FMT_FUNC bool write_console(int, string_view) { return false; }
 #else
 using dword = conditional_t<sizeof(long) == 4, unsigned long, unsigned>;
 extern "C" __declspec(dllimport) int __stdcall WriteConsoleW(  //
     void*, const void*, dword, dword*, void*);
 
-FMT_FUNC bool write_console(std::FILE* f, string_view text) {
-  auto fd = _fileno(f);
-  if (!_isatty(fd)) return false;
+FMT_FUNC bool write_console(int fd, string_view text) {
   auto u16 = utf8_to_utf16(text);
-  auto written = dword();
   return WriteConsoleW(reinterpret_cast<void*>(_get_osfhandle(fd)), u16.c_str(),
-                       static_cast<uint32_t>(u16.size()), &written, nullptr) != 0;
+                       static_cast<dword>(u16.size()), nullptr, nullptr) != 0;
 }
 #endif
 
@@ -1448,12 +1443,19 @@ FMT_FUNC bool write_console(std::FILE* f, string_view text) {
 FMT_FUNC void vprint_mojibake(std::FILE* f, string_view fmt, format_args args) {
   auto buffer = memory_buffer();
   detail::vformat_to(buffer, fmt, args);
-  fwrite_fully(buffer.data(), 1, buffer.size(), f);
+  fwrite_fully(buffer.data(), buffer.size(), f);
 }
 #endif
 
 FMT_FUNC void print(std::FILE* f, string_view text) {
-  if (!write_console(f, text)) fwrite_fully(text.data(), 1, text.size(), f);
+#ifdef _WIN32
+  int fd = _fileno(f);
+  if (_isatty(fd)) {
+    std::fflush(f);
+    if (write_console(fd, text)) return;
+  }
+#endif
+  fwrite_fully(text.data(), text.size(), f);
 }
 }  // namespace detail
 
