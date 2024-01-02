@@ -310,10 +310,10 @@ TEST(printf_test, dynamic_precision) {
   }
 }
 
-template <typename T> struct make_signed { typedef T type; };
+template <typename T> struct make_signed { using type = T; };
 
 #define SPECIALIZE_MAKE_SIGNED(T, S) \
-  template <> struct make_signed<T> { typedef S type; }
+  template <> struct make_signed<T> { using type = S; }
 
 SPECIALIZE_MAKE_SIGNED(char, signed char);
 SPECIALIZE_MAKE_SIGNED(unsigned char, signed char);
@@ -517,9 +517,8 @@ TEST(printf_test, examples) {
 }
 
 TEST(printf_test, printf_error) {
-  fmt::file read_end, write_end;
-  fmt::file::pipe(read_end, write_end);
-  int result = fmt::fprintf(read_end.fdopen("r").get(), "test");
+  auto pipe = fmt::pipe();
+  int result = fmt::fprintf(pipe.read_end.fdopen("r").get(), "test");
   EXPECT_LT(result, 0);
 }
 #endif

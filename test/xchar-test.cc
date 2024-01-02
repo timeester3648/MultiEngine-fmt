@@ -569,7 +569,7 @@ template <class charT> struct formatter<std::complex<double>, charT> {
       basic_format_parse_context<charT>& ctx) {
     auto end = parse_format_specs(ctx.begin(), ctx.end(), specs_, ctx,
                                   detail::type::float_type);
-    detail::parse_float_type_spec(specs_, detail::error_handler());
+    detail::parse_float_type_spec(specs_);
     return end;
   }
 
@@ -587,9 +587,9 @@ template <class charT> struct formatter<std::complex<double>, charT> {
                             fmt::runtime("{:" + specs + "}"), c.imag());
     auto fill_align_width = std::string();
     if (specs_.width > 0) fill_align_width = fmt::format(">{}", specs_.width);
-    return format_to(ctx.out(), runtime("{:" + fill_align_width + "}"),
-                     c.real() != 0 ? fmt::format("({}+{}i)", real, imag)
-                                   : fmt::format("{}i", imag));
+    return fmt::format_to(ctx.out(), runtime("{:" + fill_align_width + "}"),
+                          c.real() != 0 ? fmt::format("({}+{}i)", real, imag)
+                                        : fmt::format("{}i", imag));
   }
 };
 FMT_END_NAMESPACE

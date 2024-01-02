@@ -96,22 +96,22 @@ std::string s = fmt::format("I'd rather be {1} than {0}.", "right", "happy");
 // s == "I'd rather be happy than right."
 ```
 
-**Print chrono durations** ([run](https://godbolt.org/z/K8s4Mc))
+**Print dates and times** ([run](https://godbolt.org/z/c31ExdY3W))
 
 ``` c++
 #include <fmt/chrono.h>
 
 int main() {
-  using namespace std::literals::chrono_literals;
-  fmt::print("Default format: {} {}\n", 42s, 100ms);
-  fmt::print("strftime-like format: {:%H:%M:%S}\n", 3h + 15min + 30s);
+  auto now = std::chrono::system_clock::now();
+  fmt::print("Date and time: {}\n", now);
+  fmt::print("Time: {:%H:%M}\n", now);
 }
 ```
 
 Output:
 
-    Default format: 42s 100ms
-    strftime-like format: 03:15:30
+    Date and time: 2023-12-26 19:10:31.557195597
+    Time: 19:10
 
 **Print a container** ([run](https://godbolt.org/z/MxM1YqjE7))
 
@@ -277,12 +277,14 @@ check that is capable of converting occurrences of `printf` and
 `fprintf` to `fmt::print` if configured to do so. (By default it
 converts to `std::print`.)
 
-# Projects using this library
+# Notable projects using this library
 
 - [0 A.D.](https://play0ad.com/): a free, open-source, cross-platform
   real-time strategy game
 - [AMPL/MP](https://github.com/ampl/mp): an open-source library for
   mathematical programming
+- [Apple's FoundationDB](https://github.com/apple/foundationdb): an open-source,
+  distributed, transactional key-value store
 - [Aseprite](https://github.com/aseprite/aseprite): animated sprite
   editor & pixel art tool
 - [AvioBook](https://www.aviobook.aero/en): a comprehensive aircraft

@@ -120,7 +120,7 @@ template <typename Char> struct formatter<std::filesystem::path, Char> {
   format_specs<Char> specs_;
   detail::arg_ref<Char> width_ref_;
   bool debug_ = false;
-  char path_type_ = 'n';
+  char path_type_ = 0;
 
  public:
   FMT_CONSTEXPR void set_debug_format(bool set = true) { debug_ = set; }
@@ -137,8 +137,7 @@ template <typename Char> struct formatter<std::filesystem::path, Char> {
       debug_ = true;
       ++it;
     }
-    if (it != end && (*it == 'g' || *it == 'n'))
-      path_type_ = *it++;
+    if (it != end && (*it == 'g')) path_type_ = *it++;
     return it;
   }
 
@@ -146,9 +145,9 @@ template <typename Char> struct formatter<std::filesystem::path, Char> {
   auto format(const std::filesystem::path& p, FormatContext& ctx) const {
     auto specs = specs_;
 #  ifdef _WIN32
-    auto path_string = path_type_ == 'n' ? p.native() : p.generic_wstring();
+    auto path_string = !path_type_ ? p.native() : p.generic_wstring();
 #  else
-    auto path_string = path_type_ == 'n' ? p.native() : p.generic_string();
+    auto path_string = !path_type_ ? p.native() : p.generic_string();
 #  endif
 
     detail::handle_dynamic_spec<detail::width_checker>(specs.width, width_ref_,
@@ -177,7 +176,7 @@ struct formatter<std::bitset<N>, Char> : nested_formatter<string_view> {
     const std::bitset<N>& bs;
 
     template <typename OutputIt>
-    FMT_CONSTEXPR OutputIt operator()(OutputIt out) {
+    FMT_CONSTEXPR auto operator()(OutputIt out) -> OutputIt {
       for (auto pos = N; pos > 0; --pos) {
         out = detail::write<Char>(out, bs[pos - 1] ? Char('1') : Char('0'));
       }
@@ -246,8 +245,7 @@ FMT_END_NAMESPACE
 #ifdef __cpp_lib_source_location
 FMT_BEGIN_NAMESPACE
 FMT_EXPORT
-template<>
-struct formatter<std::source_location> {
+template <> struct formatter<std::source_location> {
   template <typename ParseContext> FMT_CONSTEXPR auto parse(ParseContext& ctx) {
     return ctx.begin();
   }
@@ -384,7 +382,7 @@ template <typename Char> struct formatter<std::error_code, Char> {
 FMT_EXPORT
 template <typename T, typename Char>
 struct formatter<
-    T, Char, // DEPRECATED! Mixing code unit types.
+    T, Char,  // DEPRECATED! Mixing code unit types.
     typename std::enable_if<std::is_base_of<std::exception, T>::value>::type> {
  private:
   bool with_typename_ = false;
@@ -415,7 +413,7 @@ struct formatter<
 #  ifdef FMT_HAS_ABI_CXA_DEMANGLE
     int status = 0;
     std::size_t size = 0;
-    std::unique_ptr<char, void(*)(void*)> demangled_name_ptr(
+    std::unique_ptr<char, void (*)(void*)> demangled_name_ptr(
         abi::__cxa_demangle(ti.name(), nullptr, &size, &status), &std::free);
 
     string_view demangled_name_view;
