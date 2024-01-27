@@ -20,6 +20,7 @@
 #  include <ranges>
 #endif
 
+#include "fmt/format.h"
 #include "gtest/gtest.h"
 
 #if !FMT_GCC_VERSION || FMT_GCC_VERSION >= 601
@@ -454,6 +455,22 @@ TEST(ranges_test, join_range) {
       "0,1,2,3,4");
 #  endif
 }
+
+namespace adl {
+struct vec : std::vector<int> {
+  using std::vector<int>::vector;  // inherit all constructors
+};
+
+// ADL-found begin() and end() skip the first and last element
+auto begin(vec& v) -> typename vec::iterator { return v.begin() + 1; }
+auto end(vec& v) -> typename vec::iterator { return v.end() - 1; }
+}
+
+TEST(ranges_test, format_join_adl_begin_end) {
+  auto v = adl::vec{41, 42, 43, 44};
+  EXPECT_EQ(fmt::format("{}", fmt::join(v, "/")), "42/43");
+}
+
 #endif  // FMT_RANGES_TEST_ENABLE_JOIN
 
 #if defined(__cpp_lib_ranges) && __cpp_lib_ranges >= 202302L
@@ -591,4 +608,15 @@ auto format_as(const tieable& t) -> std::tuple<int, double> {
 
 TEST(ranges_test, format_as_tie) {
   EXPECT_EQ(fmt::format("{}", tieable()), "(3, 0.42)");
+}
+
+struct lvalue_qualified_begin_end {
+  int arr[5] = {1, 2, 3, 4, 5};
+
+  auto begin() & -> const int* { return arr; }
+  auto end() & -> const int* { return arr + 5; }
+};
+
+TEST(ranges_test, lvalue_qualified_begin_end) {
+  EXPECT_EQ(fmt::format("{}", lvalue_qualified_begin_end{}), "[1, 2, 3, 4, 5]");
 }

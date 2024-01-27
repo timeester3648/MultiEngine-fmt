@@ -377,9 +377,10 @@ struct ostream_params {
 };
 
 class file_buffer final : public buffer<char> {
+ private:
   file file_;
 
-  FMT_API void grow(size_t) override;
+  FMT_API static void grow(buffer<char>& buf, size_t);
 
  public:
   FMT_API file_buffer(cstring_view path, const ostream_params& params);
@@ -430,8 +431,7 @@ class FMT_API ostream {
     output to the file.
    */
   template <typename... T> void print(format_string<T...> fmt, T&&... args) {
-    vformat_to(std::back_inserter(buffer_), fmt,
-               fmt::make_format_args(args...));
+    vformat_to(appender(buffer_), fmt, fmt::make_format_args(args...));
   }
 };
 

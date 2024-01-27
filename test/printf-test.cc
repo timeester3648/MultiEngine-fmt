@@ -310,10 +310,14 @@ TEST(printf_test, dynamic_precision) {
   }
 }
 
-template <typename T> struct make_signed { using type = T; };
+template <typename T> struct make_signed {
+  using type = T;
+};
 
-#define SPECIALIZE_MAKE_SIGNED(T, S) \
-  template <> struct make_signed<T> { using type = S; }
+#define SPECIALIZE_MAKE_SIGNED(T, S)  \
+  template <> struct make_signed<T> { \
+    using type = S;                   \
+  }
 
 SPECIALIZE_MAKE_SIGNED(char, signed char);
 SPECIALIZE_MAKE_SIGNED(unsigned char, signed char);
@@ -529,7 +533,7 @@ TEST(printf_test, wide_string) {
 
 TEST(printf_test, vprintf) {
   int n = 42;
-  auto store = fmt::format_arg_store<fmt::printf_context, int>(n);
+  auto store = fmt::make_format_args<fmt::printf_context>(n);
   auto args = fmt::basic_format_args<fmt::printf_context>(store);
   EXPECT_EQ(fmt::vsprintf(fmt::string_view("%d"), args), "42");
   EXPECT_WRITE(stdout, fmt::vfprintf(stdout, fmt::string_view("%d"), args),
@@ -550,10 +554,11 @@ TEST(printf_test, fixed_large_exponent) {
 }
 
 TEST(printf_test, make_printf_args) {
+  int n = 42;
   EXPECT_EQ("[42] something happened",
             fmt::vsprintf(fmt::string_view("[%d] %s happened"),
-                          {fmt::make_printf_args(42, "something")}));
+                          {fmt::make_printf_args(n, "something")}));
   EXPECT_EQ(L"[42] something happened",
             fmt::vsprintf(fmt::basic_string_view<wchar_t>(L"[%d] %s happened"),
-                          {fmt::make_wprintf_args(42, L"something")}));
+                          {fmt::make_printf_args<wchar_t>(n, L"something")}));
 }

@@ -20,7 +20,6 @@
 #include <cstring>      // std::strlen
 #include <iterator>     // std::back_inserter
 #include <list>         // std::list
-#include <memory>       // std::unique_ptr
 #include <type_traits>  // std::is_default_constructible
 
 #include "gtest-extra.h"
@@ -448,7 +447,7 @@ TEST(memory_buffer_test, max_size_allocator_overflow) {
 }
 
 TEST(format_test, exception_from_lib) {
-  EXPECT_THROW_MSG(fmt::throw_format_error("test"), format_error, "test");
+  EXPECT_THROW_MSG(fmt::report_error("test"), format_error, "test");
 }
 
 TEST(format_test, escape) {
@@ -556,6 +555,9 @@ TEST(format_test, named_arg) {
                    "argument not found");
   EXPECT_THROW_MSG((void)fmt::format(runtime("{a}"), 42), format_error,
                    "argument not found");
+  EXPECT_THROW_MSG((void)fmt::format(runtime("{a} {}"), fmt::arg("a", 2), 42),
+                   format_error,
+                   "cannot switch from manual to automatic argument indexing");
 }
 
 TEST(format_test, auto_arg_index) {
@@ -1540,18 +1542,6 @@ TEST(format_test, format_pointer) {
             fmt::format("{0}", reinterpret_cast<void*>(~uintptr_t())));
   EXPECT_EQ("0x1234",
             fmt::format("{}", fmt::ptr(reinterpret_cast<int*>(0x1234))));
-  std::unique_ptr<int> up(new int(1));
-  EXPECT_EQ(fmt::format("{}", fmt::ptr(up.get())),
-            fmt::format("{}", fmt::ptr(up)));
-  struct custom_deleter {
-    void operator()(int* p) const { delete p; }
-  };
-  std::unique_ptr<int, custom_deleter> upcd(new int(1));
-  EXPECT_EQ(fmt::format("{}", fmt::ptr(upcd.get())),
-            fmt::format("{}", fmt::ptr(upcd)));
-  std::shared_ptr<int> sp(new int(1));
-  EXPECT_EQ(fmt::format("{}", fmt::ptr(sp.get())),
-            fmt::format("{}", fmt::ptr(sp)));
   EXPECT_EQ(fmt::format("{}", fmt::detail::bit_cast<const void*>(
                                   &function_pointer_test)),
             fmt::format("{}", fmt::ptr(function_pointer_test)));
@@ -1603,7 +1593,8 @@ struct string_viewable {};
 
 FMT_BEGIN_NAMESPACE
 template <> struct formatter<string_viewable> : formatter<std::string_view> {
-  auto format(string_viewable, format_context& ctx) -> decltype(ctx.out()) {
+  auto format(string_viewable, format_context& ctx) const
+      -> decltype(ctx.out()) {
     return formatter<std::string_view>::format("foo", ctx);
   }
 };
@@ -1621,8 +1612,8 @@ struct explicitly_convertible_to_std_string_view {
 template <>
 struct fmt::formatter<explicitly_convertible_to_std_string_view>
     : formatter<std::string_view> {
-  auto format(explicitly_convertible_to_std_string_view v, format_context& ctx)
-      -> decltype(ctx.out()) {
+  auto format(explicitly_convertible_to_std_string_view v,
+              format_context& ctx) const -> decltype(ctx.out()) {
     return fmt::format_to(ctx.out(), "'{}'", std::string_view(v));
   }
 };
@@ -1644,7 +1635,7 @@ template <> struct formatter<date> {
     return it;
   }
 
-  auto format(const date& d, format_context& ctx) -> decltype(ctx.out()) {
+  auto format(const date& d, format_context& ctx) const -> decltype(ctx.out()) {
     // Namespace-qualify to avoid ambiguity with std::format_to.
     fmt::format_to(ctx.out(), "{}-{}-{}", d.year(), d.month(), d.day());
     return ctx.out();
@@ -1653,7 +1644,7 @@ template <> struct formatter<date> {
 
 template <> struct formatter<Answer> : formatter<int> {
   template <typename FormatContext>
-  auto format(Answer, FormatContext& ctx) -> decltype(ctx.out()) {
+  auto format(Answer, FormatContext& ctx) const -> decltype(ctx.out()) {
     return formatter<int>::format(42, ctx);
   }
 };
@@ -1753,6 +1744,14 @@ TEST(format_test, print) {
                "Don't panic!\n");
 }
 
+TEST(format_test, big_print) {
+  enum { count = 5000 };
+  auto big_print = []() {
+    for (int i = 0; i < count / 5; ++i) fmt::print("xxxxx");
+  };
+  EXPECT_WRITE(stdout, big_print(), std::string(count, 'x'));
+}
+
 TEST(format_test, variadic) {
   EXPECT_EQ(fmt::format("{}c{}", "ab", 1), "abc1");
 }
@@ -1777,7 +1776,8 @@ FMT_BEGIN_NAMESPACE
 template <> struct formatter<point> : nested_formatter<double> {
   auto format(point p, format_context& ctx) const -> decltype(ctx.out()) {
     return write_padded(ctx, [this, p](auto out) -> decltype(out) {
-      return fmt::format_to(out, "({}, {})", nested(p.x), nested(p.y));
+      return fmt::format_to(out, "({}, {})", this->nested(p.x),
+                            this->nested(p.y));
     });
   }
 };
@@ -1916,7 +1916,7 @@ template <typename, typename OutputIt> void write(OutputIt, foo) = delete;
 FMT_BEGIN_NAMESPACE
 template <>
 struct formatter<adl_test::fmt::detail::foo> : formatter<std::string> {
-  auto format(adl_test::fmt::detail::foo, format_context& ctx)
+  auto format(adl_test::fmt::detail::foo, format_context& ctx) const
       -> decltype(ctx.out()) {
     return formatter<std::string>::format("foo", ctx);
   }
@@ -2085,7 +2085,7 @@ template <> struct formatter<check_back_appender> {
   }
 
   template <typename Context>
-  auto format(check_back_appender, Context& ctx) -> decltype(ctx.out()) {
+  auto format(check_back_appender, Context& ctx) const -> decltype(ctx.out()) {
     auto out = ctx.out();
     static_assert(std::is_same<decltype(++out), decltype(out)&>::value,
                   "needs to satisfy weakly_incrementable");
@@ -2172,7 +2172,7 @@ TEST(format_int_test, format_int) {
   EXPECT_EQ(fmt::format_int(42ul).str(), "42");
   EXPECT_EQ(fmt::format_int(-42l).str(), "-42");
   EXPECT_EQ(fmt::format_int(42ull).str(), "42");
-  EXPECT_EQ(fmt::format_int(-42ll).str(), "-42");\
+  EXPECT_EQ(fmt::format_int(-42ll).str(), "-42");
   EXPECT_EQ(fmt::format_int(max_value<int64_t>()).str(),
             std::to_string(max_value<int64_t>()));
 }
@@ -2199,11 +2199,11 @@ class format_facet : public fmt::format_facet<std::locale> {
   };
 
   auto do_put(fmt::appender out, fmt::loc_value val,
-              const fmt::format_specs<>&) const -> bool override;
+              const fmt::format_specs&) const -> bool override;
 };
 
 auto format_facet::do_put(fmt::appender out, fmt::loc_value val,
-                          const fmt::format_specs<>&) const -> bool {
+                          const fmt::format_specs&) const -> bool {
   return val.visit(int_formatter{out});
 }
 
@@ -2258,4 +2258,64 @@ FMT_END_NAMESPACE
 
 TEST(format_test, formatter_nonconst_char) {
   EXPECT_EQ(fmt::format("{}", convertible_to_nonconst_cstring()), "bar");
+}
+
+namespace adl_test {
+template <typename... T> void make_format_args(const T&...) = delete;
+
+struct string : std::string {};
+}  // namespace adl_test
+
+// Test that formatting functions compile when make_format_args is found by ADL.
+TEST(format_test, adl) {
+  // Only check compilation and don't run the code to avoid polluting the output
+  // and since the output is tested elsewhere.
+  if (fmt::detail::const_check(true)) return;
+  auto s = adl_test::string();
+  char buf[10];
+  (void)fmt::format("{}", s);
+  fmt::format_to(buf, "{}", s);
+  fmt::format_to_n(buf, 10, "{}", s);
+  (void)fmt::formatted_size("{}", s);
+  fmt::print("{}", s);
+  fmt::print(stdout, "{}", s);
+}
+
+struct convertible_to_int {
+  operator int() const { return 42; }
+};
+
+struct convertible_to_cstring {
+  operator const char*() const { return "foo"; }
+};
+
+FMT_BEGIN_NAMESPACE
+template <> struct formatter<convertible_to_int> {
+  FMT_CONSTEXPR auto parse(format_parse_context& ctx) -> decltype(ctx.begin()) {
+    return ctx.begin();
+  }
+  auto format(convertible_to_int, format_context& ctx) const
+      -> decltype(ctx.out()) {
+    auto out = ctx.out();
+    *out++ = 'x';
+    return out;
+  }
+};
+
+template <> struct formatter<convertible_to_cstring> {
+  FMT_CONSTEXPR auto parse(format_parse_context& ctx) -> decltype(ctx.begin()) {
+    return ctx.begin();
+  }
+  auto format(convertible_to_cstring, format_context& ctx) const
+      -> decltype(ctx.out()) {
+    auto out = ctx.out();
+    *out++ = 'y';
+    return out;
+  }
+};
+FMT_END_NAMESPACE
+
+TEST(format_test, formatter_overrides_implicit_conversion) {
+  EXPECT_EQ(fmt::format("{}", convertible_to_int()), "x");
+  EXPECT_EQ(fmt::format("{}", convertible_to_cstring()), "y");
 }

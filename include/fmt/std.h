@@ -54,8 +54,8 @@
 
 // Check if typeid is available.
 #ifndef FMT_USE_TYPEID
-// __RTTI is for EDG compilers. In MSVC typeid is available without RTTI.
-#  if defined(__GXX_RTTI) || FMT_HAS_FEATURE(cxx_rtti) || FMT_MSC_VERSION || \
+// __RTTI is for EDG compilers. _CPPRTTI is for MSVC.
+#  if defined(__GXX_RTTI) || FMT_HAS_FEATURE(cxx_rtti) || defined(_CPPRTTI) || \
       defined(__INTEL_RTTI__) || defined(__RTTI)
 #    define FMT_USE_TYPEID 1
 #  else
@@ -117,7 +117,7 @@ void write_escaped_path(basic_memory_buffer<Char>& quoted,
 FMT_EXPORT
 template <typename Char> struct formatter<std::filesystem::path, Char> {
  private:
-  format_specs<Char> specs_;
+  format_specs specs_;
   detail::arg_ref<Char> width_ref_;
   bool debug_ = false;
   char path_type_ = 0;
@@ -137,7 +137,7 @@ template <typename Char> struct formatter<std::filesystem::path, Char> {
       debug_ = true;
       ++it;
     }
-    if (it != end && (*it == 'g')) path_type_ = *it++;
+    if (it != end && (*it == 'g')) path_type_ = detail::to_ascii(*it++);
     return it;
   }
 
@@ -293,7 +293,7 @@ template <typename T, typename C> class is_variant_formattable_ {
 
 template <typename Char, typename OutputIt, typename T>
 auto write_variant_alternative(OutputIt out, const T& v) -> OutputIt {
-  if constexpr (is_string<T>::value)
+  if constexpr (has_to_string_view<T>::value)
     return write_escaped_string<Char>(out, detail::to_string_view(v));
   else if constexpr (std::is_same_v<T, Char>)
     return write_escaped_char(out, v);
@@ -372,7 +372,7 @@ template <typename Char> struct formatter<std::error_code, Char> {
   FMT_CONSTEXPR auto format(const std::error_code& ec, FormatContext& ctx) const
       -> decltype(ctx.out()) {
     auto out = ctx.out();
-    out = detail::write_bytes(out, ec.category().name(), format_specs<Char>());
+    out = detail::write_bytes<Char>(out, ec.category().name(), format_specs());
     out = detail::write<Char>(out, Char(':'));
     out = detail::write<Char>(out, ec.value());
     return out;
@@ -400,13 +400,12 @@ struct formatter<
     return it;
   }
 
-  template <typename OutputIt>
-  auto format(const std::exception& ex,
-              basic_format_context<OutputIt, Char>& ctx) const -> OutputIt {
-    format_specs<Char> spec;
+  template <typename Context>
+  auto format(const std::exception& ex, Context& ctx) const
+      -> decltype(ctx.out()) {
     auto out = ctx.out();
     if (!with_typename_)
-      return detail::write_bytes(out, string_view(ex.what()), spec);
+      return detail::write_bytes<Char>(out, string_view(ex.what()));
 
 #if FMT_USE_TYPEID
     const std::type_info& ti = typeid(ex);
@@ -448,20 +447,21 @@ struct formatter<
     } else {
       demangled_name_view = string_view(ti.name());
     }
-    out = detail::write_bytes(out, demangled_name_view, spec);
+    out = detail::write_bytes<Char>(out, demangled_name_view);
 #  elif FMT_MSC_VERSION
     string_view demangled_name_view(ti.name());
     if (demangled_name_view.starts_with("class "))
       demangled_name_view.remove_prefix(6);
     else if (demangled_name_view.starts_with("struct "))
       demangled_name_view.remove_prefix(7);
-    out = detail::write_bytes(out, demangled_name_view, spec);
+    out = detail::write_bytes<Char>(out, demangled_name_view);
 #  else
-    out = detail::write_bytes(out, string_view(ti.name()), spec);
+    out = detail::write_bytes<Char>(out, string_view(ti.name())
+  });
 #  endif
     *out++ = ':';
     *out++ = ' ';
-    return detail::write_bytes(out, string_view(ex.what()), spec);
+    return detail::write_bytes<Char>(out, string_view(ex.what()));
 #endif
   }
 };
@@ -508,6 +508,14 @@ struct formatter<BitRef, Char,
     return formatter<bool, Char>::format(v, ctx);
   }
 };
+
+template <typename T, typename Deleter>
+auto ptr(const std::unique_ptr<T, Deleter>& p) -> const void* {
+  return p.get();
+}
+template <typename T> auto ptr(const std::shared_ptr<T>& p) -> const void* {
+  return p.get();
+}
 
 FMT_EXPORT
 template <typename T, typename Char>

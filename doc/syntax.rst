@@ -153,7 +153,8 @@ Preceding the *width* field by a zero (``'0'``) character enables sign-aware
 zero-padding for numeric types. It forces the padding to be placed after the
 sign or base (if any) but before the digits. This is used for printing fields in
 the form '+000000120'. This option is only valid for numeric types and it has no
-effect on formatting of infinity and NaN.
+effect on formatting of infinity and NaN. This option is ignored when any
+alignment specifier is present.
 
 The *precision* is a decimal number indicating how many digits should be
 displayed after the decimal point for a floating-point value formatted with
@@ -353,7 +354,7 @@ The available presentation types (*chrono_type*) are:
 |         | The modified command ``%Ec`` produces the locale's alternate date  |
 |         | and time representation.                                           |
 +---------+--------------------------------------------------------------------+
-| ``'C'`` | The year divided by 100 using floored division, e.g. "55". If the  |
+| ``'C'`` | The year divided by 100 using floored division, e.g. "19". If the  |
 |         | result is a single decimal digit, it is prefixed with 0.           |
 |         | The modified command ``%EC`` produces the locale's alternative     |
 |         | representation of the century.                                     |
