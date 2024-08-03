@@ -5,6 +5,7 @@ void main(MultiBuild::Workspace& workspace) {
 	project.name("fmt");
 	properties.binary_object_kind(MultiBuild::BinaryObjectKind::eStaticLib);
 	project.license("./LICENSE");
+	properties.tags("utf8");
 
 	project.include_own_required_includes(true);
 	project.add_required_project_include({
