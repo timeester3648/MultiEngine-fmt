@@ -15,12 +15,20 @@
 
 #include <stdint.h>  // uint32_t
 
-#include <climits>      // INT_MAX
-#include <cmath>        // std::signbit
-#include <cstring>      // std::strlen
-#include <iterator>     // std::back_inserter
-#include <list>         // std::list
-#include <type_traits>  // std::is_default_constructible
+#include <cfenv>               // fegetexceptflag and FE_ALL_EXCEPT
+#include <climits>             // INT_MAX
+#include <cmath>               // std::signbit
+#include <condition_variable>  // std::condition_variable
+#include <cstring>             // std::strlen
+#include <iterator>            // std::back_inserter
+#include <list>                // std::list
+#include <mutex>               // std::mutex
+#include <string>              // std::string
+#include <thread>              // std::thread
+#include <type_traits>         // std::is_default_constructible
+#if FMT_CPLUSPLUS > 201703L && FMT_HAS_INCLUDE(<version>)
+#  include <version>
+#endif
 
 #include "gtest-extra.h"
 #include "mock-allocator.h"
@@ -36,6 +44,10 @@ using fmt::detail::uint128_fallback;
 
 using testing::Return;
 using testing::StrictMock;
+
+#ifdef __cpp_lib_concepts
+static_assert(std::output_iterator<fmt::appender, char>);
+#endif
 
 enum { buffer_size = 256 };
 
@@ -105,6 +117,14 @@ TEST(float_test, isfinite) {
 #endif
 }
 
+void check_no_fp_exception() {
+  fexcept_t fe;
+  fegetexceptflag(&fe, FE_ALL_EXCEPT);
+
+  // No exception flags should have been set
+  EXPECT_TRUE(fe == 0);
+}
+
 template <typename Float> void check_isnan() {
   using fmt::detail::isnan;
   EXPECT_FALSE(isnan(Float(0.0)));
@@ -117,6 +137,17 @@ template <typename Float> void check_isnan() {
   EXPECT_FALSE(isnan(Float(-limits::infinity())));
   EXPECT_TRUE(isnan(Float(limits::quiet_NaN())));
   EXPECT_TRUE(isnan(Float(-limits::quiet_NaN())));
+
+  // Sanity check: make sure no error has occurred before we start
+  check_no_fp_exception();
+
+  // Check that no exception is raised for the non-NaN case
+  isnan(Float(42.0));
+  check_no_fp_exception();
+
+  // Check that no exception is raised for the NaN case
+  isnan(Float(limits::quiet_NaN()));
+  check_no_fp_exception();
 }
 
 TEST(float_test, isnan) {
@@ -239,7 +270,8 @@ TEST(util_test, format_system_error) {
     throws_on_alloc = true;
   }
   if (!throws_on_alloc) {
-    fmt::print("warning: std::allocator allocates {} chars\n", max_size);
+    fmt::print(stderr, "warning: std::allocator allocates {} chars\n",
+               max_size);
     return;
   }
 }
@@ -444,6 +476,12 @@ TEST(memory_buffer_test, max_size_allocator_overflow) {
   using test_allocator = max_size_allocator<std::allocator<char>, 160>;
   basic_memory_buffer<char, 10, test_allocator> buffer;
   EXPECT_THROW(buffer.resize(161), std::exception);
+}
+
+TEST(format_test, digits2_alignment) {
+  auto p =
+      fmt::detail::bit_cast<fmt::detail::uintptr_t>(fmt::detail::digits2(0));
+  EXPECT_EQ(p % 2, 0);
 }
 
 TEST(format_test, exception_from_lib) {
@@ -914,7 +952,7 @@ TEST(format_test, precision) {
   EXPECT_THROW_MSG((void)fmt::format(runtime("{0:."), 0.0), format_error,
                    "invalid precision");
   EXPECT_THROW_MSG((void)fmt::format(runtime("{0:.}"), 0.0), format_error,
-                   "invalid precision");
+                   "invalid format string");
 
   EXPECT_THROW_MSG((void)fmt::format(runtime("{0:.2"), 0), format_error,
                    "invalid format specifier");
@@ -950,6 +988,9 @@ TEST(format_test, precision) {
   EXPECT_EQ(fmt::format("{0:.3}", 1.1), "1.1");
   EXPECT_EQ(fmt::format("{:.0e}", 1.0L), "1e+00");
   EXPECT_EQ(fmt::format("{:9.1e}", 0.0), "  0.0e+00");
+  EXPECT_EQ(fmt::format("{:.7f}", 0.0000000000000071054273576010018587L),
+            "0.0000000");
+
   EXPECT_EQ(
       fmt::format("{:.494}", 4.9406564584124654E-324),
       "4.9406564584124654417656879286822137236505980261432476442558568250067550"
@@ -1032,13 +1073,15 @@ TEST(format_test, precision) {
   EXPECT_THROW_MSG(
       (void)fmt::format("{:.2147483646f}", -2.2121295195081227E+304),
       format_error, "number is too big");
+  EXPECT_THROW_MSG((void)fmt::format(runtime("{:.f}"), 42.0), format_error,
+                   "invalid format string");
 
   EXPECT_EQ(fmt::format("{0:.2}", "str"), "st");
   EXPECT_EQ(fmt::format("{0:.5}", "вожыкі"), "вожык");
   EXPECT_EQ(fmt::format("{0:.6}", "123456\xad"), "123456");
 }
 
-TEST(xchar_test, utf8_precision) {
+TEST(format_test, utf8_precision) {
   auto result = fmt::format("{:.4}", "caf\u00e9s");  // cafés
   EXPECT_EQ(fmt::detail::compute_width(result), 4);
   EXPECT_EQ(result, "caf\u00e9");
@@ -1622,6 +1665,20 @@ TEST(format_test, format_explicitly_convertible_to_std_string_view) {
   EXPECT_EQ("'foo'",
             fmt::format("{}", explicitly_convertible_to_std_string_view()));
 }
+
+struct convertible_to_std_string_view {
+  operator std::string_view() const noexcept { return "Hi there"; }
+};
+FMT_BEGIN_NAMESPACE
+template <>
+class formatter<convertible_to_std_string_view>
+    : public formatter<std::string_view> {};
+FMT_END_NAMESPACE
+
+TEST(format_test, format_implicitly_convertible_and_inherits_string_view) {
+  static_assert(fmt::is_formattable<convertible_to_std_string_view>{}, "");
+  EXPECT_EQ("Hi there", fmt::format("{}", convertible_to_std_string_view{}));
+}
 #endif
 
 class Answer {};
@@ -1752,6 +1809,71 @@ TEST(format_test, big_print) {
   EXPECT_WRITE(stdout, big_print(), std::string(count, 'x'));
 }
 
+// Windows CRT implements _IOLBF incorrectly (full buffering).
+#if FMT_USE_FCNTL && !defined(_WIN32)
+TEST(format_test, line_buffering) {
+  auto pipe = fmt::pipe();
+
+  int write_fd = pipe.write_end.descriptor();
+  auto write_end = pipe.write_end.fdopen("w");
+  setvbuf(write_end.get(), nullptr, _IOLBF, 4096);
+  write_end.print("42\n");
+  close(write_fd);
+  try {
+    write_end.close();
+  } catch (const std::system_error&) {
+  }
+
+  auto read_end = pipe.read_end.fdopen("r");
+  std::thread reader([&]() {
+    int n = 0;
+    int result = fscanf(read_end.get(), "%d", &n);
+    (void)result;
+    EXPECT_EQ(n, 42);
+  });
+
+  reader.join();
+}
+#endif
+
+struct deadlockable {
+  int value = 0;
+  mutable std::mutex mutex;
+};
+
+FMT_BEGIN_NAMESPACE
+template <> struct formatter<deadlockable> {
+  FMT_CONSTEXPR auto parse(format_parse_context& ctx) -> decltype(ctx.begin()) {
+    return ctx.begin();
+  }
+
+  auto format(const deadlockable& d, format_context& ctx) const
+      -> decltype(ctx.out()) {
+    std::lock_guard<std::mutex> lock(d.mutex);
+    return format_to(ctx.out(), "{}", d.value);
+  }
+};
+FMT_END_NAMESPACE
+
+TEST(format_test, locking_formatter) {
+  auto f = fmt::buffered_file();
+  try {
+    f = fmt::buffered_file("/dev/null", "w");
+  } catch (const std::system_error&) {
+    fmt::print(stderr, "warning: /dev/null is not supported\n");
+    return;
+  }
+  deadlockable d;
+  auto t = std::thread([&]() {
+    fmt::print(f.get(), "start t\n");
+    std::lock_guard<std::mutex> lock(d.mutex);
+    for (int i = 0; i < 1000000; ++i) d.value += 10;
+    fmt::print(f.get(), "done\n");
+  });
+  for (int i = 0; i < 100; ++i) fmt::print(f.get(), "{}", d);
+  t.join();
+}
+
 TEST(format_test, variadic) {
   EXPECT_EQ(fmt::format("{}c{}", "ab", 1), "abc1");
 }
@@ -1765,6 +1887,9 @@ TEST(format_test, bytes) {
 TEST(format_test, group_digits_view) {
   EXPECT_EQ(fmt::format("{}", fmt::group_digits(10000000)), "10,000,000");
   EXPECT_EQ(fmt::format("{:8}", fmt::group_digits(1000)), "   1,000");
+  EXPECT_EQ(fmt::format("{}", fmt::group_digits(-10000000)), "-10,000,000");
+  EXPECT_EQ(fmt::format("{:8}", fmt::group_digits(-1000)), "  -1,000");
+  EXPECT_EQ(fmt::format("{:8}", fmt::group_digits(-100)), "    -100");
 }
 
 #ifdef __cpp_generic_lambdas
@@ -1945,6 +2070,13 @@ TEST(format_test, output_iterators) {
   std::stringstream s;
   fmt::format_to(std::ostream_iterator<char>(s), "{}", 42);
   EXPECT_EQ("42", s.str());
+}
+
+TEST(format_test, fill_via_appender) {
+  fmt::memory_buffer buf;
+  auto it = fmt::appender(buf);
+  std::fill_n(it, 3, '~');
+  EXPECT_EQ(fmt::to_string(buf), "~~~");
 }
 
 TEST(format_test, formatted_size) {
@@ -2147,16 +2279,21 @@ template <typename Char, typename... T> void check_enabled_formatters() {
 }
 
 TEST(format_test, test_formatters_enabled) {
+  using custom_string =
+      std::basic_string<char, std::char_traits<char>, mock_allocator<char>>;
+  using custom_wstring = std::basic_string<wchar_t, std::char_traits<wchar_t>,
+                                           mock_allocator<wchar_t>>;
+
   check_enabled_formatters<char, bool, char, signed char, unsigned char, short,
                            unsigned short, int, unsigned, long, unsigned long,
                            long long, unsigned long long, float, double,
                            long double, void*, const void*, char*, const char*,
-                           std::string, std::nullptr_t>();
-  check_enabled_formatters<wchar_t, bool, wchar_t, signed char, unsigned char,
-                           short, unsigned short, int, unsigned, long,
-                           unsigned long, long long, unsigned long long, float,
-                           double, long double, void*, const void*, wchar_t*,
-                           const wchar_t*, std::wstring, std::nullptr_t>();
+                           std::string, custom_string, std::nullptr_t>();
+  check_enabled_formatters<
+      wchar_t, bool, wchar_t, signed char, unsigned char, short, unsigned short,
+      int, unsigned, long, unsigned long, long long, unsigned long long, float,
+      double, long double, void*, const void*, wchar_t*, const wchar_t*,
+      std::wstring, custom_wstring, std::nullptr_t>();
 }
 
 TEST(format_int_test, data) {
@@ -2318,4 +2455,26 @@ FMT_END_NAMESPACE
 TEST(format_test, formatter_overrides_implicit_conversion) {
   EXPECT_EQ(fmt::format("{}", convertible_to_int()), "x");
   EXPECT_EQ(fmt::format("{}", convertible_to_cstring()), "y");
+}
+
+struct ustring {
+  using value_type = unsigned;
+
+  auto find_first_of(value_type, size_t) const -> size_t;
+
+  auto data() const -> const char*;
+  auto size() const -> size_t;
+};
+
+FMT_BEGIN_NAMESPACE
+template <> struct formatter<ustring> : formatter<std::string> {
+  auto format(const ustring&, format_context& ctx) const
+      -> decltype(ctx.out()) {
+    return formatter<std::string>::format("ustring", ctx);
+  }
+};
+FMT_END_NAMESPACE
+
+TEST(format_test, ustring) {
+  EXPECT_EQ(fmt::format("{}", ustring()), "ustring");
 }

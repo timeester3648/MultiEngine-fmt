@@ -6,9 +6,6 @@
 /CMakeScripts
 /Testing
 /_CPack_Packages
-/doc/doxyxml
-/doc/html
-/doc/node_modules
 /install_manifest.txt
 CMakeCache.txt
 CMakeFiles
@@ -21,7 +18,6 @@ build/
 cmake_install.cmake
 fmt-*.cmake
 fmt.pc
-virtualenv
 
 # exclude project files
 **.sln
