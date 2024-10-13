@@ -727,7 +727,8 @@ class basic_specs {
   char fill_data_[max_fill_size] = {' '};
 
   FMT_CONSTEXPR void set_fill_size(size_t size) {
-    data_ = (data_ & ~fill_size_mask) | (size << fill_size_shift);
+    //data_ = (data_ & ~fill_size_mask) | (size << fill_size_shift);
+    data_ = (data_ & ~fill_size_mask) | static_cast<unsigned long>(size << fill_size_shift);
   }
 
  public:
@@ -2632,8 +2633,10 @@ inline auto runtime(string_view s) -> runtime_format_string<> { return {{s}}; }
 /// A compile-time format string.
 template <typename... T> struct fstring {
  private:
+  /*static constexpr int num_static_named_args =
+      detail::count_static_named_args<T...>();*/
   static constexpr int num_static_named_args =
-      detail::count_static_named_args<T...>();
+      static_cast<int>(detail::count_static_named_args<T...>());
 
   using checker = detail::format_string_checker<
       char, static_cast<int>(sizeof...(T)), num_static_named_args,

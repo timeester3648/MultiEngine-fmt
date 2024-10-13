@@ -69,8 +69,11 @@ template <typename Char, typename... T> struct basic_fstring {
  private:
   basic_string_view<Char> str_;
 
+  /*static constexpr int num_static_named_args =
+      detail::count_static_named_args<T...>();*/
+
   static constexpr int num_static_named_args =
-      detail::count_static_named_args<T...>();
+      static_cast<int>(detail::count_static_named_args<T...>());
 
   using checker = detail::format_string_checker<
       Char, static_cast<int>(sizeof...(T)), num_static_named_args,
