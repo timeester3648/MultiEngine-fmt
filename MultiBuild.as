@@ -18,4 +18,9 @@ void main(MultiBuild::Workspace& workspace) {
 		"./src/os.cc",
 		"./src/format.cc"
 	});
+
+	{
+		MultiBuild::ScopedFilter _(project, "project.compiler:VisualCpp");
+		properties.disable_warnings("4834");
+	}
 }
