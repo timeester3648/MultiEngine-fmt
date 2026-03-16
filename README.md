@@ -1,8 +1,8 @@
 <img src="https://user-images.githubusercontent.com/576385/156254208-f5b743a9-88cf-439d-b0c0-923d53e8d551.png" alt="{fmt}" width="25%"/>
 
-[![image](https://github.com/fmtlib/fmt/workflows/linux/badge.svg)](https://github.com/fmtlib/fmt/actions?query=workflow%3Alinux)
-[![image](https://github.com/fmtlib/fmt/workflows/macos/badge.svg)](https://github.com/fmtlib/fmt/actions?query=workflow%3Amacos)
-[![image](https://github.com/fmtlib/fmt/workflows/windows/badge.svg)](https://github.com/fmtlib/fmt/actions?query=workflow%3Awindows)
+[![image](https://github.com/fmtlib/fmt/actions/workflows/linux.yml/badge.svg?branch=master)](https://github.com/fmtlib/fmt/actions?query=workflow%3Alinux)
+[![image](https://github.com/fmtlib/fmt/actions/workflows/macos.yml/badge.svg?branch=master)](https://github.com/fmtlib/fmt/actions?query=workflow%3Amacos)
+[![image](https://github.com/fmtlib/fmt/actions/workflows/windows.yml/badge.svg?branch=master)](https://github.com/fmtlib/fmt/actions?query=workflow%3Awindows)
 [![fmt is continuously fuzzed at oss-fuzz](https://oss-fuzz-build-logs.storage.googleapis.com/badges/fmt.svg)](https://bugs.chromium.org/p/oss-fuzz/issues/list?\%0Acolspec=ID%20Type%20Component%20Status%20Proj%20Reported%20Owner%20\%0ASummary&q=proj%3Dfmt&can=1)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/8880/badge)](https://www.bestpractices.dev/projects/8880)
 [![image](https://api.securityscorecards.dev/projects/github.com/fmtlib/fmt/badge)](https://securityscorecards.dev/viewer/?uri=github.com/fmtlib/fmt)
@@ -391,7 +391,7 @@ available being a part of the C standard library. The main drawback is
 that it doesn\'t support user-defined types. `printf` also has safety
 issues although they are somewhat mitigated with [\_\_attribute\_\_
 ((format (printf,
-\...))](https://gcc.gnu.org/onlinedocs/gcc/Function-Attributes.html) in
+\...))](https://gcc.gnu.org/onlinedocs/gcc/Common-Attributes.html) in
 GCC. There is a POSIX extension that adds positional arguments required
 for
 [i18n](https://en.wikipedia.org/wiki/Internationalization_and_localization)
