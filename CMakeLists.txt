@@ -63,7 +63,7 @@ if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.28 AND CMAKE_CXX_STANDARD
                     OUTPUT_VARIABLE NINJA_VERSION)
     if (NINJA_VERSION VERSION_GREATER_EQUAL 1.11)
       if ((CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION
-                                                    GREATER_EQUAL 14)
+                                                    GREATER_EQUAL 15)
           OR (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
               AND CMAKE_CXX_COMPILER_VERSION GREATER_EQUAL 16)
           OR (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" AND MSVC_VERSION
@@ -256,11 +256,13 @@ function (setup_target target kind)
     target_compile_definitions(${target} ${kind} FMT_UNICODE=0)
   endif ()
 
-  set_target_properties(
-    ${target}
-    PROPERTIES VERSION ${FMT_VERSION}
-               SOVERSION ${CPACK_PACKAGE_VERSION_MAJOR}
-               DEBUG_POSTFIX "${FMT_DEBUG_POSTFIX}")
+  if (NOT "${kind}" STREQUAL "INTERFACE")
+    set_target_properties(
+      ${target}
+      PROPERTIES VERSION ${FMT_VERSION}
+                 SOVERSION ${CPACK_PACKAGE_VERSION_MAJOR}
+                 DEBUG_POSTFIX "${FMT_DEBUG_POSTFIX}")
+  endif ()
 endfunction ()
 
 set(FMT_HEADERS)
@@ -417,8 +419,19 @@ target_compile_definitions(fmt-header-only INTERFACE FMT_HEADER_ONLY=1)
 target_compile_features(fmt-header-only INTERFACE cxx_std_11)
 setup_target(fmt-header-only INTERFACE)
 
-add_library(fmt-c STATIC src/fmt-c.cc)
+add_library(fmt-c src/fmt-c.cc)
 target_compile_features(fmt-c INTERFACE c_std_11)
+if (BUILD_SHARED_LIBS)
+  target_compile_definitions(
+    fmt-c
+    PRIVATE FMT_LIB_EXPORT
+    INTERFACE FMT_SHARED)
+endif ()
+set_target_properties(
+  fmt-c
+  PROPERTIES VERSION ${FMT_VERSION}
+             SOVERSION ${CPACK_PACKAGE_VERSION_MAJOR}
+             DEBUG_POSTFIX "${FMT_DEBUG_POSTFIX}")
 if (MSVC)
   target_compile_options(fmt-c PUBLIC /Zc:preprocessor)
 endif ()
@@ -582,7 +595,9 @@ if (FMT_MASTER_PROJECT AND EXISTS ${gitignore})
     string(REPLACE "*" ".*" line "${line}")
     set(ignored_files ${ignored_files} "${line}$" "${line}/")
   endforeach ()
-  set(ignored_files ${ignored_files} /.git /build/doxyxml .vagrant)
+  # Exclude the whole build tree: the .gitignore-derived `build/` pattern does
+  # not actually prune the directory or its contents from the source package.
+  set(ignored_files ${ignored_files} /.git "/build($|/)" .vagrant)
 
   set(CPACK_SOURCE_GENERATOR ZIP)
   set(CPACK_SOURCE_IGNORE_FILES ${ignored_files})
