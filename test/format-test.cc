@@ -606,6 +606,71 @@ TEST(format_test, display_width_precision) {
   EXPECT_EQ(fmt::format("{:.5}", "🐱🐱🐱"), "🐱🐱");
 }
 
+TEST(format_test, display_width_emoji) {
+  // U+2705 and U+274C are Emoji_Presentation code points outside the East
+  // Asian Wide ranges; they should still occupy two columns like other
+  // emoji (https://github.com/fmtlib/fmt/issues/4851).
+  EXPECT_EQ(fmt::format("{:^6}", "✅"), "  ✅  ");
+  EXPECT_EQ(fmt::format("{:^6}", "❌"), "  ❌  ");
+}
+
+// Reproduces the exact example from
+// https://github.com/fmtlib/fmt/issues/4851: emoji should be centered like
+// other double-width (e.g. CJK) text instead of like single-width text.
+TEST(format_test, display_width_issue_4851) {
+  EXPECT_EQ(fmt::format("{:^20}", 12345), "       12345        ");
+  EXPECT_EQ(fmt::format("{:^20}", "normal string"), "   normal string    ");
+  EXPECT_EQ(fmt::format("{:^20}", "❌"), "         ❌         ");
+  EXPECT_EQ(fmt::format("{:^20}", "✅"), "         ✅         ");
+  EXPECT_EQ(fmt::format("{:^20}", "Müller"), "       Müller       ");
+  EXPECT_EQ(fmt::format("{:^20}", "我"), "         我         ");
+}
+
+TEST(format_test, display_width_multiple_emoji) {
+  // Several Emoji_Presentation code points back to back, each contributing
+  // two columns.
+  EXPECT_EQ(fmt::format("{:^10}", "❌✅"), "   ❌✅   ");
+  EXPECT_EQ(fmt::format("{:^12}", "❌✅❌"), "   ❌✅❌   ");
+  // Mixing an already-supported emoji range (🐱, U+1F431) with a newly
+  // covered one (✅, U+2705).
+  EXPECT_EQ(fmt::format("{:^10}", "🐱✅"), "   🐱✅   ");
+}
+
+TEST(format_test, display_width_mixed_content) {
+  // ASCII + new-range emoji + CJK in the same string.
+  EXPECT_EQ(fmt::format("{:^11}", "A✅我"), "   A✅我   ");
+  // Accented Latin (each combined character is one column) + emoji + ASCII.
+  EXPECT_EQ(fmt::format("{:^16}", "Müller❌!"), "   Müller❌!    ");
+}
+
+TEST(format_test, display_width_precision_multiple_emoji) {
+  // Precision truncates by display width, not code point count: a third
+  // two-column emoji would push the total past the limit in both cases.
+  EXPECT_EQ(fmt::format("{:.5}", "❌✅❌"), "❌✅");
+  EXPECT_EQ(fmt::format("{:.4}", "❌✅❌"), "❌✅");
+}
+
+TEST(format_test, display_width_emoji_alignment) {
+  EXPECT_EQ(fmt::format("{:<10}", "✅"), "✅        ");
+  EXPECT_EQ(fmt::format("{:>10}", "✅"), "        ✅");
+  EXPECT_EQ(fmt::format("{:*^10}", "✅"), "****✅****");
+}
+
+TEST(format_test, display_width_new_emoji_ranges) {
+  // Spot-check ranges added outside the two blocks fmt already supported
+  // (Transport and Map Symbols, Symbols and Pictographs Extended-A).
+  EXPECT_EQ(fmt::format("{:^10}", "🚗"), "    🚗    ");  // U+1F697
+  EXPECT_EQ(fmt::format("{:^10}", "🫠"), "    🫠    ");  // U+1FAE0
+}
+
+TEST(format_test, display_width_regional_indicator_pair) {
+  // A flag is two regional indicator code points; each is Neutral under
+  // East_Asian_Width (not Wide), so each is measured as one column, giving
+  // the pair a total of two columns, matching how terminals render the flag
+  // as a single two-column glyph.
+  EXPECT_EQ(fmt::format("{:^10}", "🇺🇸"), "    🇺🇸    ");
+}
+
 template <int N> struct test_format {
   template <typename... T>
   static auto format(fmt::string_view fmt, const T&... args) -> std::string {
@@ -941,6 +1006,7 @@ TEST(format_test, width) {
 
 TEST(format_test, debug_presentation) {
   EXPECT_EQ(fmt::format("{:?}", ""), R"("")");
+  EXPECT_EQ(fmt::format("{:1?}", ""), R"("")");
 
   EXPECT_EQ(fmt::format("{:*<5.0?}", "\n"), R"(*****)");
   EXPECT_EQ(fmt::format("{:*<5.1?}", "\n"), R"("****)");
@@ -1334,6 +1400,16 @@ TEST(format_test, format_int) {
                    "invalid format specifier");
   check_unknown_types(42, "bBdoxXnLc", "integer");
   EXPECT_EQ(fmt::format("{:c}", static_cast<int>('x')), "x");
+  // The 'c' type treats all character types as unsigned for portability, so the
+  // representable range for char is [0, 255] and out-of-range values are
+  // reported as an error.
+  EXPECT_EQ(fmt::format("{:c}", 200), std::string(1, static_cast<char>(200)));
+  EXPECT_EQ(fmt::format("{:c}", 255), std::string(1, static_cast<char>(255)));
+  const char* msg = "character value out of range";
+  EXPECT_THROW_MSG((void)fmt::format("{:c}", -1), format_error, msg);
+  EXPECT_THROW_MSG((void)fmt::format("{:c}", -104), format_error, msg);
+  EXPECT_THROW_MSG((void)fmt::format("{:c}", 256), format_error, msg);
+  EXPECT_THROW_MSG((void)fmt::format("{:c}", 400u), format_error, msg);
 }
 
 TEST(format_test, format_bin) {
@@ -1529,6 +1605,13 @@ TEST(format_test, format_double) {
 
     d = std::numeric_limits<double>::denorm_min();
     EXPECT_EQ(fmt::format("{:a}", d), "0x0.0000000000001p-1022");
+
+    // Zero has no subnormal exponent: printf prints it as 0x0p+0.
+    EXPECT_EQ(fmt::format("{:a}", 0.0), "0x0p+0");
+    EXPECT_EQ(fmt::format("{:a}", -0.0), "-0x0p+0");
+    EXPECT_EQ(fmt::format("{:A}", 0.0), "0X0P+0");
+    EXPECT_EQ(fmt::format("{:#a}", 0.0), "0x0.p+0");
+    EXPECT_EQ(fmt::format("{:.3a}", 0.0), "0x0.000p+0");
   }
 
   if (std::numeric_limits<long double>::digits == 64) {
@@ -1605,6 +1688,7 @@ TEST(format_test, format_nan) {
   EXPECT_EQ(fmt::format("{:<7}", nan), "nan    ");
   EXPECT_EQ(fmt::format("{:^7}", nan), "  nan  ");
   EXPECT_EQ(fmt::format("{:>7}", nan), "    nan");
+  EXPECT_EQ(fmt::format("{:7}", nan), "    nan");
 }
 
 TEST(format_test, format_infinity) {
@@ -1622,6 +1706,7 @@ TEST(format_test, format_infinity) {
   EXPECT_EQ(fmt::format("{:<7}", inf), "inf    ");
   EXPECT_EQ(fmt::format("{:^7}", inf), "  inf  ");
   EXPECT_EQ(fmt::format("{:>7}", inf), "    inf");
+  EXPECT_EQ(fmt::format("{:7}", inf), "    inf");
 }
 
 TEST(format_test, format_long_double) {
@@ -1664,6 +1749,7 @@ TEST(format_test, format_char) {
 
   EXPECT_EQ(fmt::format("{}", '\n'), "\n");
   EXPECT_EQ(fmt::format("{:?}", '\n'), "'\\n'");
+  EXPECT_EQ(fmt::format("{:6?}", 'a'), "'a'   ");
   EXPECT_EQ(fmt::format("{:x}", '\xff'), "ff");
 }
 
@@ -1982,7 +2068,6 @@ TEST(format_test, group_digits_view) {
   EXPECT_EQ(fmt::format("{:8}", fmt::group_digits(-100)), "    -100");
 }
 
-#ifdef __cpp_generic_lambdas
 struct point {
   double x, y;
 };
@@ -1990,18 +2075,20 @@ struct point {
 FMT_BEGIN_NAMESPACE
 template <> struct formatter<point> : nested_formatter<double> {
   auto format(point p, format_context& ctx) const -> decltype(ctx.out()) {
-    return write_padded(ctx, [this, p](auto out) -> decltype(out) {
-      return fmt::format_to(out, "({}, {})", this->nested(p.x),
-                            this->nested(p.y));
-    });
+    return write(ctx, "(", nested(p.x), ", ", nested(p.y), ")");
   }
 };
 FMT_END_NAMESPACE
 
 TEST(format_test, nested_formatter) {
   EXPECT_EQ(fmt::format("{:>16.2f}", point{1, 2}), "    (1.00, 2.00)");
+  EXPECT_EQ(fmt::format("{:.{}f}", point{1.234, 5.678}, 2), "(1.23, 5.68)");
+  EXPECT_EQ(fmt::format("{:>20.{}f}", point{1.234, 5.678}, 2),
+            "        (1.23, 5.68)");
+  EXPECT_EQ(fmt::format("{:>{}.2f}", point{1, 2}, 20), "        (1.00, 2.00)");
+  EXPECT_EQ(fmt::format("{:.{}f}", point{1.2344, 67.8901}, 3),
+            "(1.234, 67.890)");
 }
-#endif  // __cpp_generic_lambdas
 
 enum test_enum { foo, bar };
 auto format_as(test_enum e) -> int { return e; }
@@ -2632,6 +2719,9 @@ TEST(incomplete_type_test, format) {
   EXPECT_EQ(fmt::format("{}", external_instance), "42");
 }
 
+#if FMT_GCC_VERSION >= 1600
+FMT_PRAGMA_GCC(diagnostic ignored "-Wsfinae-incomplete")
+#endif
 struct incomplete_type {};
 const incomplete_type& external_instance = {};
 

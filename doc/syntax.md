@@ -251,7 +251,7 @@ fmt::format("{:#06x}", 0xfe);  // # adds the prefix, 06 zero-pads to width 6
 
 | Type | Effect                                                              |
 |------|---------------------------------------------------------------------|
-| `a`  | Hexadecimal-significand form (e.g. `1.8p+1`). Lower-case digits and a lower-case `p` for the binary exponent. The `#` flag adds a `0x` prefix. |
+| `a`  | Hexadecimal-significand form (e.g. `0x1.8p+1`). Lower-case digits and a lower-case `p` for the binary exponent. The `0x` prefix is always emitted, matching printf's `%a`. The `#` flag forces a decimal point (e.g. `0x1.p+1`).
 | `A`  | Same as `a`, but upper-case throughout.                             |
 | `e`  | Scientific notation with a lower-case `e` for the decimal exponent. |
 | `E`  | Scientific notation with an upper-case `E`.                         |
@@ -300,7 +300,7 @@ chrono_specs       ::= conversion_spec |
                        chrono_specs (conversion_spec | literal_char)
 conversion_spec    ::= "%" [padding_modifier] [locale_modifier] chrono_type
 literal_char       ::= &lt;a character other than '{', '}' or '%'>
-padding_modifier   ::= "-" | "_"  | "0"
+padding_modifier   ::= "-" | "_"
 locale_modifier    ::= "E" | "O"
 chrono_type        ::= "a" | "A" | "b" | "B" | "c" | "C" | "d" | "D" | "e" |
                        "F" | "g" | "G" | "h" | "H" | "I" | "j" | "m" | "M" |
@@ -600,7 +600,6 @@ The available padding modifiers (*padding_modifier*) are:
 |-------|-----------------------------------------|
 | `'_'` | Pad a numeric result with spaces.       |
 | `'-'` | Do not pad a numeric result string.     |
-| `'0'` | Pad a numeric result string with zeros. |
 
 These modifiers are only supported for the `'H'`, `'I'`, `'M'`, `'S'`, `'U'`,
 `'V'`, `'W'`, `'Y'`, `'d'`, `'j'` and `'m'` presentation types.
@@ -626,8 +625,14 @@ fmt::print("{:%Y-%m-%d %H:%M:%S}", t);
 The format specification for range types has the following syntax:
 
 <pre><code class="language-json"
->range_format_spec ::= ["n"][range_type][":" range_underlying_spec]</code>
+>range_format_spec ::= [[fill]align][width]["n"][range_type][":" range_underlying_spec]</code>
 </pre>
+
+The `fill`, `align` and `width` options have the same meaning as in the
+[standard format specification](#format-specification-mini-language), except
+that `:` cannot be used as a fill character because it introduces the
+underlying element specification. They apply to the whole formatted range
+rather than to its elements.
 
 The `'n'` option formats the range without the opening and closing brackets.
 

@@ -163,6 +163,10 @@ TEST(compile_test, named) {
             fmt::format(FMT_COMPILE("{a0} {a1}"), "a0"_a = 41, "a1"_a = 43));
   EXPECT_EQ("41 43",
             fmt::format(FMT_COMPILE("{a1} {a0}"), "a0"_a = 43, "a1"_a = 41));
+
+  // A statically-named argument with a format spec compiles to spec_field,
+  // which passes the argument to make_format_args as const (#4866).
+  EXPECT_EQ("4.2", fmt::format(FMT_COMPILE("{arg:3.1f}"), "arg"_a = 4.2));
 #  endif
 }
 
@@ -479,3 +483,14 @@ TEST(compile_test, constexpr_string_format) {
   EXPECT_TRUE(big);
 }
 #endif  // FMT_USE_CONSTEXPR_STRING
+
+struct type_with_format_as {
+  int value;
+};
+int format_as(type_with_format_as v) { return v.value; }
+
+TEST(compile_test, format_as) {
+  // Use a format string other than "{}" so that formatting goes through the
+  // compiled field path rather than the to_string fast path.
+  EXPECT_EQ("[42]", fmt::format(FMT_COMPILE("[{}]"), type_with_format_as{42}));
+}

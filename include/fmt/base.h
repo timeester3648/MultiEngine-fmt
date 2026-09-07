@@ -21,7 +21,7 @@
 #endif
 
 // The fmt library version in the form major * 10000 + minor * 100 + patch.
-#define FMT_VERSION 120200
+#define FMT_VERSION 120201
 
 // Detect compiler versions.
 #if defined(__clang__) && !defined(__ibmxl__)
@@ -223,6 +223,11 @@
 #else
 #  define FMT_PRAGMA_CLANG(x)
 #endif
+#if FMT_MSC_VERSION
+#  define FMT_PRAGMA_MSVC(x) __pragma(x)
+#else
+#  define FMT_PRAGMA_MSVC(x)
+#endif
 
 #ifndef FMT_USE_OPTIMIZE_PRAGMA
 #  define FMT_USE_OPTIMIZE_PRAGMA 1
@@ -234,6 +239,9 @@ FMT_PRAGMA_GCC(push_options)
     !defined(__CUDACC__) && !defined(FMT_MODULE)
 FMT_PRAGMA_GCC(optimize("Og"))
 #endif
+
+FMT_PRAGMA_MSVC(warning(push))
+FMT_PRAGMA_MSVC(warning(disable : 4702))
 
 #ifdef FMT_DEPRECATED
 // Use the provided definition.
@@ -1050,6 +1058,10 @@ template <typename T> struct is_static_named_arg : std::false_type {};
 
 template <typename T, typename Char>
 struct is_named_arg<named_arg<T, Char>> : std::true_type {};
+
+template <typename T> struct is_named_arg<const T> : is_named_arg<T> {};
+template <typename T>
+struct is_static_named_arg<const T> : is_static_named_arg<T> {};
 
 template <typename T, typename Char = char> struct named_arg : view {
   const Char* name;
@@ -2938,6 +2950,7 @@ FMT_INLINE void println(format_string<T...> fmt, T&&... args) {
 }
 
 FMT_PRAGMA_GCC(pop_options)
+FMT_PRAGMA_MSVC(warning(pop))
 FMT_END_EXPORT
 FMT_END_NAMESPACE
 

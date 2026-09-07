@@ -9,6 +9,7 @@ The {fmt} library API consists of the following components:
 - [`fmt/ranges.h`](#ranges-api): formatting of ranges and tuples
 - [`fmt/chrono.h`](#chrono-api): date and time formatting
 - [`fmt/std.h`](#std-api): formatters for standard library types
+- [`fmt/enum.h`](#enum-api): formatting of annotated enums
 - [`fmt/compile.h`](#compile-api): format string compilation
 - [`fmt/color.h`](#color-api): terminal colors and text styles
 - [`fmt/os.h`](#os-api): system APIs
@@ -92,6 +93,10 @@ Use `format_as` if you want to make your type formattable as some other
 type with the same format specifiers. The `format_as` function should
 take an object of your type and return an object of a formattable type.
 It should be defined in the same namespace as your type.
+`format_as` cannot be used when a type also matches another `formatter`
+specialization, such as the range `formatter`, because the specializations
+would be ambiguous. Disable the conflicting specialization, if possible,
+or provide an explicit `formatter` specialization instead.
 
 Example ([run](https://godbolt.org/z/nvME4arz8)):
 
@@ -176,10 +181,7 @@ For example:
     template <>
     struct fmt::formatter<point> : nested_formatter<double> {
       auto format(point p, format_context& ctx) const {
-        return write_padded(ctx, [=](auto out) {
-          return format_to(out, "({}, {})", this->nested(p.x),
-                           this->nested(p.y));
-        });
+        return write(ctx, "(", nested(p.x), ", ", nested(p.y), ")");
       }
     };
 
@@ -472,7 +474,7 @@ Using `fmt::join`, you can separate tuple elements with a custom separator:
 - [`std::tm`](https://en.cppreference.com/w/cpp/chrono/c/tm)
 
 The format syntax is described in [Chrono Format Specifications](syntax.md#
-chrono-format-specifications).
+chrono-format-spec).
 
 **Example**:
 
@@ -551,6 +553,54 @@ fmt::print("{}", +s.bit);
 ```
 
 This is a known limitation of "perfect" forwarding in C++.
+
+<a id="enum-api"></a>
+## Enum Formatting
+
+`fmt/enum.h` provides formatting of enums annotated with
+`fmt::as_identifiers`. Such an enum is formatted as the identifier of the
+enumerator matching the formatted value:
+
+    #include <fmt/enum.h>
+
+    enum class [[=fmt::as_identifiers]] color { red, green, blue };
+
+    fmt::print("{}", color::green);
+    // Output: green
+
+Such enums are formatted using the string [Format Specification](
+syntax.md#format-specification), for example:
+
+    fmt::print("[{:>7}]", color::red);
+    // Output: [    red]
+
+Identifiers are only available as `char` strings so annotated enums are not
+formattable with other character types.
+
+If several enumerators have the same value, the first one in the order of
+declaration is used. A value that doesn't match any enumerator is represented
+as its underlying value in decimal before applying string formatting:
+
+    fmt::print("{}", static_cast<color>(42));
+    // Output: 42
+
+Enums without the annotation are not affected and are formatted as before, i.e.
+scoped enums require `format_as` or a `formatter` specialization, see
+[Formatting User-Defined Types](#udt).
+
+This uses two C++26 features:
+[reflection](https://en.cppreference.com/w/cpp/language/operator_reflection) to
+retrieve the enumerator identifiers and
+[annotations](https://en.cppreference.com/w/cpp/language/annotations) to opt an
+enum in via `fmt::as_identifiers`. It therefore requires a compiler with
+reflection support,
+which may need an extra flag such as `-freflection` in GCC. The macro
+`FMT_USE_REFLECTION` is set to 1 if reflection is available and to 0 otherwise.
+It can also be defined by the user to disable the use of reflection.
+
+When {fmt} is built as a module, reflection support is detected when the module
+itself is compiled, so this API is only available to importers if the module was
+built with reflection enabled.
 
 <a id="compile-api"></a>
 ## Compile-Time Support
@@ -750,9 +800,9 @@ configuring CMake.
 
 - **`FMT_OPTIMIZE_SIZE`**: Controls binary size optimizations:
     - `0` - off (default)
-    - `1` - disables locale support and applies some optimizations
-    - `2` - disables some Unicode features, named arguments and applies more
-      aggressive optimizations
+    - `1` - applies some optimizations
+    - `2` - disables locale support by default, some Unicode features, and
+      named arguments, and applies more aggressive optimizations
 
 ### Binary Size Optimization
 

@@ -167,12 +167,6 @@ template <typename T> struct iterator_traits<fmt::basic_appender<T>> {
 #  define FMT_THROW(x) ::fmt::assert_fail(__FILE__, __LINE__, (x).what())
 #endif
 
-#ifdef __clang_analyzer__
-#  define FMT_CLANG_ANALYZER 1
-#else
-#  define FMT_CLANG_ANALYZER 0
-#endif
-
 // Defining FMT_REDUCE_INT_INSTANTIATIONS to 1, will reduce the number of
 // integer formatter template instantiations to just one by only using the
 // largest integer type. This results in a reduction in binary size but will
@@ -655,26 +649,188 @@ FMT_CONSTEXPR void for_each_codepoint(string_view s, F f) {
   } while (buf_ptr < buf + num_chars_left);
 }
 
+struct wide_cp_range {
+  uint32_t first;
+  uint32_t last;
+};
+
+// Code points with display width 2, i.e. those with the Unicode 16.0.0
+// East_Asian_Width property set to W(ide) or F(ullwidth)
+// (https://www.unicode.org/reports/tr11/), sorted and merged.
+template <typename = void> struct wide_cp_data {
+  static constexpr wide_cp_range ranges[] = {
+      // Hangul Jamo
+      {0x1100, 0x115f},
+      // Miscellaneous Technical
+      {0x231a, 0x231b},
+      {0x2329, 0x232a},
+      {0x23e9, 0x23ec},
+      {0x23f0, 0x23f0},
+      {0x23f3, 0x23f3},
+      // Geometric Shapes
+      {0x25fd, 0x25fe},
+      // Miscellaneous Symbols
+      {0x2614, 0x2615},
+      {0x2630, 0x2637},
+      {0x2648, 0x2653},
+      {0x267f, 0x267f},
+      {0x268a, 0x268f},
+      {0x2693, 0x2693},
+      {0x26a1, 0x26a1},
+      {0x26aa, 0x26ab},
+      {0x26bd, 0x26be},
+      {0x26c4, 0x26c5},
+      {0x26ce, 0x26ce},
+      {0x26d4, 0x26d4},
+      {0x26ea, 0x26ea},
+      {0x26f2, 0x26f3},
+      {0x26f5, 0x26f5},
+      {0x26fa, 0x26fa},
+      {0x26fd, 0x26fd},
+      // Dingbats
+      {0x2705, 0x2705},
+      {0x270a, 0x270b},
+      {0x2728, 0x2728},
+      {0x274c, 0x274c},
+      {0x274e, 0x274e},
+      {0x2753, 0x2755},
+      {0x2757, 0x2757},
+      {0x2795, 0x2797},
+      {0x27b0, 0x27b0},
+      {0x27bf, 0x27bf},
+      // Miscellaneous Symbols and Arrows
+      {0x2b1b, 0x2b1c},
+      {0x2b50, 0x2b50},
+      {0x2b55, 0x2b55},
+      // CJK Radicals Supplement
+      {0x2e80, 0x2e99},
+      {0x2e9b, 0x2ef3},
+      // Kangxi Radicals
+      {0x2f00, 0x2fd5},
+      // Ideographic Description Characters .. CJK Symbols and Punctuation
+      {0x2ff0, 0x303e},
+      // Hiragana
+      {0x3041, 0x3096},
+      // Hiragana .. Katakana
+      {0x3099, 0x30ff},
+      // Bopomofo
+      {0x3105, 0x312f},
+      // Hangul Compatibility Jamo
+      {0x3131, 0x318e},
+      // Kanbun .. CJK Strokes
+      {0x3190, 0x31e5},
+      // CJK Strokes .. Enclosed CJK Letters and Months
+      {0x31ef, 0x321e},
+      // Enclosed CJK Letters and Months
+      {0x3220, 0x3247},
+      // Enclosed CJK Letters and Months .. Yi Syllables
+      {0x3250, 0xa48c},
+      // Yi Radicals
+      {0xa490, 0xa4c6},
+      // Hangul Jamo Extended-A
+      {0xa960, 0xa97c},
+      // Hangul Syllables
+      {0xac00, 0xd7a3},
+      // CJK Compatibility Ideographs
+      {0xf900, 0xfaff},
+      // Vertical Forms
+      {0xfe10, 0xfe19},
+      // CJK Compatibility Forms .. Small Form Variants
+      {0xfe30, 0xfe52},
+      // Small Form Variants
+      {0xfe54, 0xfe66},
+      {0xfe68, 0xfe6b},
+      // Halfwidth and Fullwidth Forms
+      {0xff01, 0xff60},
+      {0xffe0, 0xffe6},
+      // Ideographic Symbols and Punctuation
+      {0x16fe0, 0x16fe4},
+      {0x16ff0, 0x16ff1},
+      // Tangut
+      {0x17000, 0x187f7},
+      // Tangut Components .. Khitan Small Script
+      {0x18800, 0x18cd5},
+      // Khitan Small Script .. Tangut Supplement
+      {0x18cff, 0x18d08},
+      // Kana Extended-B
+      {0x1aff0, 0x1aff3},
+      {0x1aff5, 0x1affb},
+      {0x1affd, 0x1affe},
+      // Kana Supplement .. Kana Extended-A
+      {0x1b000, 0x1b122},
+      // Small Kana Extension
+      {0x1b132, 0x1b132},
+      {0x1b150, 0x1b152},
+      {0x1b155, 0x1b155},
+      {0x1b164, 0x1b167},
+      // Nushu
+      {0x1b170, 0x1b2fb},
+      // Tai Xuan Jing Symbols
+      {0x1d300, 0x1d356},
+      // Counting Rod Numerals
+      {0x1d360, 0x1d376},
+      // Mahjong Tiles
+      {0x1f004, 0x1f004},
+      // Playing Cards
+      {0x1f0cf, 0x1f0cf},
+      // Enclosed Alphanumeric Supplement
+      {0x1f18e, 0x1f18e},
+      {0x1f191, 0x1f19a},
+      // Enclosed Ideographic Supplement
+      {0x1f200, 0x1f202},
+      {0x1f210, 0x1f23b},
+      {0x1f240, 0x1f248},
+      {0x1f250, 0x1f251},
+      {0x1f260, 0x1f265},
+      // Miscellaneous Symbols and Pictographs .. Emoticons, treated as
+      // fully wide per [format.string.std] regardless of East_Asian_Width.
+      {0x1f300, 0x1f64f},
+      // Transport and Map Symbols
+      {0x1f680, 0x1f6c5},
+      {0x1f6cc, 0x1f6cc},
+      {0x1f6d0, 0x1f6d2},
+      {0x1f6d5, 0x1f6d7},
+      {0x1f6dc, 0x1f6df},
+      {0x1f6eb, 0x1f6ec},
+      {0x1f6f4, 0x1f6fc},
+      // Geometric Shapes Extended
+      {0x1f7e0, 0x1f7eb},
+      {0x1f7f0, 0x1f7f0},
+      // Supplemental Symbols and Pictographs, treated as fully wide per
+      // [format.string.std] regardless of East_Asian_Width.
+      {0x1f900, 0x1f9ff},
+      // Symbols and Pictographs Extended-A
+      {0x1fa70, 0x1fa7c},
+      {0x1fa80, 0x1fa89},
+      {0x1fa8f, 0x1fac6},
+      {0x1face, 0x1fadc},
+      {0x1fadf, 0x1fae9},
+      {0x1faf0, 0x1faf8},
+      // CJK Unified Ideographs Extension B (plane 2)
+      {0x20000, 0x2fffd},
+      // CJK Unified Ideographs Extension G (plane 3)
+      {0x30000, 0x3fffd},
+  };
+};
+
+#if FMT_CPLUSPLUS < 201703L
+template <typename T> constexpr wide_cp_range wide_cp_data<T>::ranges[];
+#endif
+
 FMT_CONSTEXPR inline auto display_width_of(uint32_t cp) noexcept -> size_t {
-  return to_unsigned(
-      1 + (cp >= 0x1100 &&
-           (cp <= 0x115f ||  // Hangul Jamo init. consonants
-            cp == 0x2329 ||  // LEFT-POINTING ANGLE BRACKET
-            cp == 0x232a ||  // RIGHT-POINTING ANGLE BRACKET
-            // CJK ... Yi except IDEOGRAPHIC HALF FILL SPACE:
-            (cp >= 0x2e80 && cp <= 0xa4cf && cp != 0x303f) ||
-            (cp >= 0xac00 && cp <= 0xd7a3) ||    // Hangul Syllables
-            (cp >= 0xf900 && cp <= 0xfaff) ||    // CJK Compatibility Ideographs
-            (cp >= 0xfe10 && cp <= 0xfe19) ||    // Vertical Forms
-            (cp >= 0xfe30 && cp <= 0xfe6f) ||    // CJK Compatibility Forms
-            (cp >= 0xff00 && cp <= 0xff60) ||    // Fullwidth Forms
-            (cp >= 0xffe0 && cp <= 0xffe6) ||    // Fullwidth Forms
-            (cp >= 0x20000 && cp <= 0x2fffd) ||  // CJK
-            (cp >= 0x30000 && cp <= 0x3fffd) ||
-            // Miscellaneous Symbols and Pictographs + Emoticons:
-            (cp >= 0x1f300 && cp <= 0x1f64f) ||
-            // Supplemental Symbols and Pictographs:
-            (cp >= 0x1f900 && cp <= 0x1f9ff))));
+  if (cp < 0x1100) return 1;
+  size_t lo = 0;
+  size_t hi = sizeof(wide_cp_data<>::ranges) / sizeof(wide_cp_range);
+  while (lo < hi) {
+    size_t mid = lo + (hi - lo) / 2;
+    if (cp < wide_cp_data<>::ranges[mid].first)
+      hi = mid;
+    else if (cp > wide_cp_data<>::ranges[mid].last)
+      lo = mid + 1;
+    else
+      return 2;
+  }
+  return 1;
 }
 
 template <typename T> struct is_integral : std::is_integral<T> {};
@@ -1064,12 +1220,6 @@ template <typename T> FMT_CONSTEXPR auto count_digits_fallback(T n) -> int {
     count += 4;
   }
 }
-#if FMT_USE_INT128
-FMT_CONSTEXPR inline auto count_digits(native_uint128 n) -> int {
-  return count_digits_fallback(n);
-}
-#endif
-
 #ifdef FMT_BUILTIN_CLZLL
 // It is a separate function rather than a part of count_digits to workaround
 // the lack of static constexpr in constexpr functions.
@@ -1099,6 +1249,20 @@ FMT_CONSTEXPR20 inline auto count_digits(uint64_t n) -> int {
 #endif
   return count_digits_fallback(n);
 }
+
+#if FMT_USE_INT128
+FMT_CONSTEXPR20 inline auto count_digits(native_uint128 n) -> int {
+  if (is_constant_evaluated()) return count_digits_fallback(n);
+  // 128-bit division is a slow library call, so reduce to 64-bit chunks via
+  // 10^19 (the largest power of 10 fitting in uint64_t).
+  const uint64_t pow10_19 = 10000000000000000000ULL;
+  if ((n >> 64) == 0) return count_digits(static_cast<uint64_t>(n));
+  n /= pow10_19;
+  if ((n >> 64) == 0) return count_digits(static_cast<uint64_t>(n)) + 19;
+  n /= pow10_19;
+  return count_digits(static_cast<uint64_t>(n)) + 38;
+}
+#endif
 
 // Counts the number of digits in n. BITS = log2(radix).
 template <int BITS, typename UInt>
@@ -1231,10 +1395,30 @@ template <typename Char, typename UInt>
 FMT_CONSTEXPR20 auto do_format_decimal(Char* out, UInt value, int size)
     -> Char* {
   FMT_ASSERT(size >= count_digits(value), "invalid digit count");
+#if FMT_USE_INT128
+  // Avoid slow 128-bit division by formatting 64-bit chunks of 19 digits each.
+  if (!is_constant_evaluated() && num_bits<UInt>() == 128) {
+    const uint64_t pow10_19 = 10000000000000000000ULL;
+    auto v = static_cast<native_uint128>(value);
+    unsigned pos = to_unsigned(size);
+    while ((v >> 64) != 0) {
+      auto chunk = static_cast<uint64_t>(v % pow10_19);
+      v /= pow10_19;
+      pos -= 19;
+      fill_n(out + pos, 19, Char('0'));
+      do_format_decimal(out + pos, chunk, 19);
+    }
+    auto top = static_cast<uint64_t>(v);
+    int top_digits = count_digits(top);
+    pos -= to_unsigned(top_digits);
+    do_format_decimal(out + pos, top, top_digits);
+    return out + pos;
+  }
+#endif  // FMT_USE_INT128
   unsigned n = to_unsigned(size);
   while (value >= 100) {
     n -= 2;
-    if (!is_constant_evaluated() && sizeof(UInt) == 4) {
+    if (!is_constant_evaluated() && num_bits<UInt>() == 32) {
       auto p = value * static_cast<uint64_t>((1ull << 39) / 100 + 1);
       write2digits_i(out + n, p >> (39 - 7) & ((1 << 7) - 1));
       value = static_cast<UInt>(p >> 39) +
@@ -1885,11 +2069,22 @@ template <typename Char, typename OutputIt>
 FMT_CONSTEXPR auto write_char(OutputIt out, Char value,
                               const format_specs& specs) -> OutputIt {
   bool is_debug = specs.type() == presentation_type::debug;
-  return write_padded<Char>(out, specs, 1, [=](reserve_iterator<OutputIt> it) {
-    if (is_debug) return write_escaped_char(it, value);
-    *it++ = value;
-    return it;
-  });
+  Char buf[12];
+  auto* begin = buf;
+  auto* end = begin;
+  size_t size = 1;
+
+  if (is_debug) {
+    end = write_escaped_char(begin, value);
+    size = to_unsigned(end - begin);
+  }
+
+  return write_padded<Char>(out, specs, size,
+                            [=](reserve_iterator<OutputIt> it) {
+                              if (is_debug) return copy<Char>(begin, end, it);
+                              *it++ = value;
+                              return it;
+                            });
 }
 
 template <typename Char> class digit_grouping {
@@ -1961,6 +2156,15 @@ FMT_CONSTEXPR inline void prefix_append(unsigned& prefix, unsigned value) {
   prefix += (1u + (value > 0xff ? 1 : 0)) << 24;
 }
 
+// Writes an integer as a character, treating chars as unsigned.
+template <typename Char, typename OutputIt, typename UInt>
+FMT_CONSTEXPR auto write_int_chr(OutputIt out, UInt abs_value, bool negative,
+                                 const format_specs& specs) -> OutputIt {
+  if (negative || abs_value > max_value<make_unsigned_t<Char>>())
+    report_error("character value out of range");
+  return write_char<Char>(out, static_cast<Char>(abs_value), specs);
+}
+
 // Writes a decimal integer with digit grouping.
 template <typename OutputIt, typename UInt, typename Char>
 auto write_int(OutputIt out, UInt value, unsigned prefix,
@@ -1997,7 +2201,7 @@ auto write_int(OutputIt out, UInt value, unsigned prefix,
     format_base2e<char>(1, appender(buffer), value, num_digits);
     break;
   case presentation_type::chr:
-    return write_char<Char>(out, static_cast<Char>(value), specs);
+    return write_int_chr<Char>(out, value, (prefix & 0xff) == '-', specs);
   }
 
   unsigned size = (prefix != 0 ? prefix >> 24 : 0) + to_unsigned(num_digits) +
@@ -2124,7 +2328,7 @@ FMT_CONSTEXPR FMT_INLINE auto write_int(OutputIt out, write_int_arg<T> arg,
       prefix_append(prefix, unsigned(specs.upper() ? 'B' : 'b') << 8 | '0');
     break;
   case presentation_type::chr:
-    return write_char<Char>(out, static_cast<Char>(abs_value), specs);
+    return write_int_chr<Char>(out, abs_value, (prefix & 0xff) == '-', specs);
   }
 
   // Write an integer in the format
@@ -2157,29 +2361,19 @@ FMT_CONSTEXPR FMT_NOINLINE auto write_int_noinline(OutputIt out,
   return write_int<Char>(out, arg, specs);
 }
 
-template <typename Char, typename T,
-          FMT_ENABLE_IF(is_integral<T>::value &&
-                        !std::is_same<T, bool>::value &&
-                        !std::is_same<T, Char>::value)>
-FMT_CONSTEXPR FMT_INLINE auto write(basic_appender<Char> out, T value,
-                                    const format_specs& specs, locale_ref loc)
-    -> basic_appender<Char> {
-  if (specs.localized() && write_loc(out, value, specs, loc)) return out;
-  return write_int_noinline<Char>(out, make_write_int_arg(value, specs.sign()),
-                                  specs);
-}
-
-// An inlined version of write used in format string compilation.
 template <typename Char, typename OutputIt, typename T,
           FMT_ENABLE_IF(is_integral<T>::value &&
                         !std::is_same<T, bool>::value &&
-                        !std::is_same<T, Char>::value &&
-                        !std::is_same<OutputIt, basic_appender<Char>>::value)>
+                        !std::is_same<T, Char>::value)>
 FMT_CONSTEXPR FMT_INLINE auto write(OutputIt out, T value,
                                     const format_specs& specs, locale_ref loc)
     -> OutputIt {
   if (specs.localized() && write_loc(out, value, specs, loc)) return out;
-  return write_int<Char>(out, make_write_int_arg(value, specs.sign()), specs);
+  auto arg = make_write_int_arg(value, specs.sign());
+  // Out of line for appenders to avoid bloat; inlined for compiled formatting.
+  if FMT_CONSTEXPR20 (std::is_same<OutputIt, basic_appender<Char>>::value)
+    return write_int_noinline<Char>(out, arg, specs);
+  return write_int<Char>(out, arg, specs);
 }
 
 template <typename Char, typename OutputIt>
@@ -2247,6 +2441,12 @@ FMT_CONSTEXPR auto write(OutputIt out, basic_string_view<Char> s,
 
     return false;
   });
+
+  if (is_debug && s.size() == 0 && specs.precision != 0 &&
+      display_width < display_width_limit) {
+    ++display_width;
+    ++size;
+  }
 
   struct bounded_output_iterator {
     reserve_iterator<OutputIt> underlying_iterator;
@@ -2381,12 +2581,11 @@ FMT_CONSTEXPR20 auto write_nonfinite(OutputIt out, bool isnan,
   const bool is_zero_fill =
       specs.fill_size() == 1 && specs.fill_unit<Char>() == '0';
   if (is_zero_fill) specs.set_fill(' ');
-  return write_padded<Char>(out, specs, size,
-                            [=](reserve_iterator<OutputIt> it) {
-                              if (s != sign::none)
-                                *it++ = detail::getsign<Char>(s);
-                              return copy<Char>(str, str + str_size, it);
-                            });
+  return write_padded<Char, align::right>(
+      out, specs, size, [=](reserve_iterator<OutputIt> it) {
+        if (s != sign::none) *it++ = detail::getsign<Char>(s);
+        return copy<Char>(str, str + str_size, it);
+      });
 }
 
 // A decimal floating-point number significand * pow(10, exp).
@@ -3088,6 +3287,8 @@ FMT_CONSTEXPR20 void format_hexfloat(Float value, format_specs specs,
   basic_fp<carrier_uint> f(value);
   f.e += num_float_significand_bits;
   if (!has_implicit_bit<Float>()) --f.e;
+  // Reset the exponent for zero to print it as 0x0p+0.
+  if (f.f == 0) f.e = 0;
 
   const auto num_fraction_bits =
       num_float_significand_bits + (has_implicit_bit<Float>() ? 1 : 0);
@@ -3111,7 +3312,7 @@ FMT_CONSTEXPR20 void format_hexfloat(Float value, format_specs specs,
       f.f &= ~(inc - 1);
     }
 
-    // Check long double overflow
+    // Check long double overflow.
     if (!has_implicit_bit<Float>()) {
       const auto implicit_bit = carrier_uint(1) << num_float_significand_bits;
       if ((f.f & implicit_bit) == implicit_bit) {
@@ -3127,7 +3328,7 @@ FMT_CONSTEXPR20 void format_hexfloat(Float value, format_specs specs,
   detail::fill_n(xdigits, sizeof(xdigits), '0');
   format_base2e(4, xdigits, f.f, num_xdigits, specs.upper());
 
-  // Remove zero tail
+  // Remove zero tail.
   while (print_xdigits > 0 && xdigits[print_xdigits] == '0') --print_xdigits;
 
   buf.push_back('0');
@@ -3852,6 +4053,50 @@ FMT_CONSTEXPR auto native_formatter<T, Char, TYPE>::format(
                       specs_.precision_ref, ctx);
   return write<Char>(ctx.out(), val, specs, ctx.locale());
 }
+
+// Parses and applies the outer alignment and width of a nested value.
+template <typename Char> class nested_format_specs {
+ private:
+  format_specs specs_;
+  arg_ref<Char> width_ref_;
+
+ public:
+  constexpr nested_format_specs() : specs_(), width_ref_() {}
+
+  FMT_CONSTEXPR auto parse(const Char* begin, const Char* end,
+                           parse_context<Char>& ctx) -> const Char* {
+    if (begin == end || *begin == '}') return begin;
+    begin = parse_align(begin, end, specs_);
+    if (begin == end) return begin;
+    Char c = *begin;
+    if ((c >= '0' && c <= '9') || c == '{')
+      begin = parse_width(begin, end, specs_, width_ref_, ctx);
+    return begin;
+  }
+
+  FMT_CONSTEXPR auto parse(const Char* begin, const Char* end,
+                           parse_context<Char>& ctx, Char separator)
+      -> const Char* {
+    // A separator introduces the nested spec and is never a fill character.
+    if (begin != end && *begin == separator) return begin;
+    return parse(begin, end, ctx);
+  }
+
+  template <typename FormatContext, typename F, typename... T>
+  FMT_CONSTEXPR auto write(FormatContext& ctx, const F& f, T&&... values) const
+      -> decltype(ctx.out()) {
+    auto specs = specs_;
+    handle_dynamic_spec(specs.dynamic_width(), specs.width, width_ref_, ctx);
+    if (specs.width == 0) return f.write_body(ctx, static_cast<T&&>(values)...);
+
+    auto buf = basic_memory_buffer<Char>();
+    auto buffer_ctx =
+        FormatContext(basic_appender<Char>(buf), ctx.args(), ctx.locale());
+    f.write_body(buffer_ctx, static_cast<T&&>(values)...);
+    return detail::write<Char>(
+        ctx.out(), basic_string_view<Char>(buf.data(), buf.size()), specs);
+  }
+};
 }  // namespace detail
 
 FMT_BEGIN_EXPORT
@@ -3887,6 +4132,9 @@ template <typename OutputIt, typename Char> class generic_context {
   }
   constexpr auto arg_id(basic_string_view<Char> name) const -> int {
     return args_.get_id(name);
+  }
+  auto args() const -> const basic_format_args<generic_context>& {
+    return args_;
   }
 
   constexpr auto out() const -> iterator { return out_; }
@@ -4088,64 +4336,54 @@ template <typename T> struct formatter<group_digits_view<T>> : formatter<T> {
   }
 };
 
-template <typename T, typename Char> struct nested_view {
-  const formatter<T, Char>* fmt;
+template <typename T> struct nested_view {
   const T* value;
 };
 
-template <typename T, typename Char>
-struct formatter<nested_view<T, Char>, Char> {
-  FMT_CONSTEXPR auto parse(parse_context<Char>& ctx) -> const Char* {
-    return ctx.begin();
-  }
-  template <typename FormatContext>
-  auto format(nested_view<T, Char> view, FormatContext& ctx) const
-      -> decltype(ctx.out()) {
-    return view.fmt->format(*view.value, ctx);
-  }
-};
-
-template <typename T, typename Char = char> struct nested_formatter {
+template <typename U, typename Char = char> struct nested_formatter {
  private:
-  basic_specs specs_;
-  int width_;
-  formatter<T, Char> formatter_;
+  detail::nested_format_specs<Char> specs_;
+  formatter<U, Char> formatter_;
+
+  template <typename FormatContext>
+  auto write_arg(FormatContext& ctx, nested_view<U> view) const
+      -> decltype(ctx.out()) {
+    return formatter_.format(*view.value, ctx);
+  }
+
+  template <typename FormatContext, typename V>
+  auto write_arg(FormatContext& ctx, const V& value) const
+      -> decltype(ctx.out()) {
+    return detail::write<Char>(ctx.out(), value);
+  }
+
+  template <typename FormatContext, typename... T>
+  auto write_body(FormatContext& ctx, const T&... args) const
+      -> decltype(ctx.out()) {
+    FMT_APPLY_VARIADIC(ctx.advance_to(write_arg(ctx, args)));
+    return ctx.out();
+  }
+
+  friend class detail::nested_format_specs<Char>;
 
  public:
-  constexpr nested_formatter() : width_(0) {}
+  constexpr nested_formatter() : specs_(), formatter_() {}
 
   FMT_CONSTEXPR auto parse(parse_context<Char>& ctx) -> const Char* {
     auto it = ctx.begin(), end = ctx.end();
     if (it == end) return it;
-    auto specs = format_specs();
-    it = detail::parse_align(it, end, specs);
-    specs_ = specs;
-    Char c = *it;
-    auto width_ref = detail::arg_ref<Char>();
-    if ((c >= '0' && c <= '9') || c == '{') {
-      it = detail::parse_width(it, end, specs, width_ref, ctx);
-      width_ = specs.width;
-    }
+    it = specs_.parse(it, end, ctx);
     ctx.advance_to(it);
     return formatter_.parse(ctx);
   }
 
-  template <typename FormatContext, typename F>
-  auto write_padded(FormatContext& ctx, F write) const -> decltype(ctx.out()) {
-    if (width_ == 0) return write(ctx.out());
-    auto buf = basic_memory_buffer<Char>();
-    write(basic_appender<Char>(buf));
-    auto specs = format_specs();
-    specs.width = width_;
-    specs.copy_fill_from(specs_);
-    specs.set_align(specs_.align());
-    return detail::write<Char>(
-        ctx.out(), basic_string_view<Char>(buf.data(), buf.size()), specs);
+  template <typename FormatContext, typename... T>
+  auto write(FormatContext& ctx, const T&... args) const
+      -> decltype(ctx.out()) {
+    return specs_.write(ctx, *this, args...);
   }
 
-  auto nested(const T& value) const -> nested_view<T, Char> {
-    return nested_view<T, Char>{&formatter_, &value};
-  }
+  auto nested(const U& value) const -> nested_view<U> { return {&value}; }
 };
 
 inline namespace literals {
@@ -4235,26 +4473,21 @@ class format_int {
   inline auto str() const -> std::string { return {str_, size()}; }
 };
 
-#if FMT_CLANG_ANALYZER
-#  define FMT_STRING_IMPL(s, base) s
-#else
-#  define FMT_STRING_IMPL(s, base)                                           \
-    [] {                                                                     \
-      /* Use the hidden visibility as a workaround for a GCC bug (#1973). */ \
-      /* Use a macro-like name to avoid shadowing warnings. */               \
-      struct FMT_VISIBILITY("hidden") FMT_COMPILE_STRING : base {            \
-        using char_type = fmt::remove_cvref_t<decltype(s[0])>;               \
-        constexpr explicit operator fmt::basic_string_view<char_type>()      \
-            const {                                                          \
-          return fmt::detail::compile_string_to_view<char_type>(s);          \
-        }                                                                    \
-      };                                                                     \
-      using FMT_STRING_VIEW =                                                \
-          fmt::basic_string_view<typename FMT_COMPILE_STRING::char_type>;    \
-      fmt::detail::ignore_unused(FMT_STRING_VIEW(FMT_COMPILE_STRING()));     \
-      return FMT_COMPILE_STRING();                                           \
-    }()
-#endif  // FMT_CLANG_ANALYZER
+#define FMT_STRING_IMPL(s, base)                                              \
+  [] {                                                                        \
+    /* Use the hidden visibility as a workaround for a GCC bug (#1973). */    \
+    /* Use a macro-like name to avoid shadowing warnings. */                  \
+    struct FMT_VISIBILITY("hidden") FMT_COMPILE_STRING : base {               \
+      using char_type = fmt::remove_cvref_t<decltype(s[0])>;                  \
+      constexpr explicit operator fmt::basic_string_view<char_type>() const { \
+        return fmt::detail::compile_string_to_view<char_type>(s);             \
+      }                                                                       \
+    };                                                                        \
+    using FMT_STRING_VIEW =                                                   \
+        fmt::basic_string_view<typename FMT_COMPILE_STRING::char_type>;       \
+    fmt::detail::ignore_unused(FMT_STRING_VIEW(FMT_COMPILE_STRING()));        \
+    return FMT_COMPILE_STRING();                                              \
+  }()
 
 /**
  * Constructs a legacy compile-time format string from a string literal `s`.

@@ -45,6 +45,7 @@ add_fmt_test(base-test)
 add_fmt_test(assert-test)
 add_fmt_test(chrono-test)
 add_fmt_test(color-test)
+add_fmt_test(enum-test)
 add_fmt_test(gtest-extra-test)
 add_fmt_test(format-test mock-allocator.h)
 if (MSVC)
@@ -133,6 +134,8 @@ if (FMT_PEDANTIC)
                              PRIVATE ${PROJECT_SOURCE_DIR}/include)
   target_compile_definitions(nolocale-test
                              PRIVATE FMT_STATIC_THOUSANDS_SEPARATOR=1)
+  target_compile_options(nolocale-test
+                         PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/utf-8>)
 endif ()
 
 # These tests are disabled on Windows because they take too long.
@@ -242,6 +245,14 @@ if (FMT_CUDA_TEST)
 endif ()
 
 enable_language(C)
-add_executable(c-test c-test.c)
-target_link_libraries(c-test PRIVATE fmt::fmt-c)
-add_test(NAME c-test COMMAND c-test)
+# Clang < 3.8 doesn't apply array-to-pointer decay to the controlling
+# expression of _Generic (https://llvm.org/PR16340), so fmt-c.h's argument
+# dispatch doesn't match string literals there.
+if (CMAKE_C_COMPILER_ID STREQUAL "Clang" AND CMAKE_C_COMPILER_VERSION
+                                             VERSION_LESS 3.8)
+  message(STATUS "Skipping c-test: _Generic is broken in Clang < 3.8")
+else ()
+  add_executable(c-test c-test.c)
+  target_link_libraries(c-test PRIVATE fmt::fmt-c)
+  add_test(NAME c-test COMMAND c-test)
+endif ()
